@@ -1,6 +1,14 @@
-const ITERATIONS = 1024;
+const ITERATIONS = 2096;
 
 const calculateMandelbrotSet = (z, x, y, size) => {
+  const is_in_cardioid_or_bulb = (x_pos, y_pos) => {
+    let y2 = Math.pow(y_pos, 2);
+    let q = Math.pow(x_pos - 0.25, 2) + y2;
+    let in_cardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
+    let in_bulb = Math.pow(x_pos + 1.0, 2) + y2 < 0.0625;
+    in_cardioid || in_bulb;
+  };
+
   const data = new Uint8Array(size * size * 4);
 
   const scale = Math.pow(2, -z) * 4;
@@ -9,6 +17,10 @@ const calculateMandelbrotSet = (z, x, y, size) => {
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
     for (let pixelY = 0; pixelY < size; pixelY++) {
+      if (is_in_cardioid_or_bulb(pixelX, pixelY)) {
+        return 0;
+      }
+
       let zx = 0;
       let zy = 0;
       let cx = offsetX + (pixelX * scale) / size;

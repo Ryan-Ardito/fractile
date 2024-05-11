@@ -37,6 +37,7 @@ const map = new Map({
     }),
   ],
   view: new View({
+    enableRotation: false,
     center: [0, 0],
     zoom: 0,
   }),
