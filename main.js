@@ -1,17 +1,40 @@
-import './style.css';
-import {Map, View} from 'ol';
-import TileLayer from 'ol/layer/Tile';
-import OSM from 'ol/source/OSM';
+import DataTile from "ol/source/DataTile.js";
+import Map from "ol/Map.js";
+import TileLayer from "ol/layer/WebGLTile.js";
+import View from "ol/View.js";
+
+const size = 256;
+
+const loadTile = (z, x, y) => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("mandelbrotWorker.js");
+    worker.onmessage = (e) => {
+      const data = e.data;
+      worker.terminate();
+      resolve(data);
+    };
+
+    worker.onerror = (error) => {
+      worker.terminate();
+      reject(error);
+    };
+
+    worker.postMessage({ z, x, y, size });
+  });
+};
 
 const map = new Map({
-  target: 'map',
+  target: "map",
   layers: [
     new TileLayer({
-      source: new OSM()
-    })
+      preload: Infinity,
+      source: new DataTile({
+        loader: loadTile,
+      }),
+    }),
   ],
   view: new View({
     center: [0, 0],
-    zoom: 2
-  })
+    zoom: 0,
+  }),
 });
