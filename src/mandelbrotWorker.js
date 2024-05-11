@@ -22,7 +22,7 @@ const calculateMandelbrotSet = (z, x, y, size) => {
         i++;
       }
 
-      i = i % ITERATIONS;
+      i = (i - 1) % (ITERATIONS - 1);
 
       const brightness = ((i / 100) * 255) | 0;
       let red = (brightness % 8) * 32;
