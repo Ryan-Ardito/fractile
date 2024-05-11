@@ -3,7 +3,7 @@ import Map from "ol/Map.js";
 import TileLayer from "ol/layer/WebGLTile.js";
 import View from "ol/View.js";
 
-const size = 256;
+const size = 512;
 
 const loadTile = (z, x, y) => {
   return new Promise((resolve, reject) => {
@@ -31,6 +31,7 @@ const map = new Map({
     new TileLayer({
       preload: Infinity,
       source: new DataTile({
+        tileSize: size,
         loader: loadTile,
       }),
     }),
