@@ -7,7 +7,9 @@ const size = 256;
 
 const loadTile = (z, x, y) => {
   return new Promise((resolve, reject) => {
-    const worker = new Worker("mandelbrotWorker.js");
+    const worker = new Worker(
+      new URL("./mandelbrotWorker.js", import.meta.url)
+    );
     worker.onmessage = (e) => {
       const data = e.data;
       worker.terminate();
