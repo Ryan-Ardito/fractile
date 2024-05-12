@@ -7,16 +7,16 @@ const calculateMandelbrotSet = (z, x, y, size) => {
   const is_in_cardioid_or_bulb = (x_pos, y_pos) => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
-    let in_cardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
-    let in_bulb = Math.pow(x_pos + 1.0, 2) + y2 < 0.0625;
-    return in_cardioid || in_bulb;
+    let inCardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
+    let inBulb = Math.pow(x_pos + 1.0, 2) + y2 < 0.0625;
+    return inCardioid || inBulb;
   };
 
   const escapeTime = (cx, cy) => {
     let zx = 0;
     let zy = 0;
-    let x_old = 0;
-    let y_old = 0;
+    let xCycle = 0;
+    let yCycle = 0;
 
     let i = 0;
     while (i < ITERATIONS) {
@@ -30,17 +30,17 @@ const calculateMandelbrotSet = (z, x, y, size) => {
         i++;
 
         if (i >= CYCLE_DETECTION_DELAY) {
-          let x_visited = Math.abs(zx - x_old) < PERIODICITY_THRESHOLD;
-          let y_visited = Math.abs(zy - y_old) < PERIODICITY_THRESHOLD;
+          let xVisited = Math.abs(zx - xCycle) < PERIODICITY_THRESHOLD;
+          let yVisited = Math.abs(zy - yCycle) < PERIODICITY_THRESHOLD;
 
-          if (x_visited && y_visited) {
+          if (xVisited && yVisited) {
             return 1;
           }
         }
       }
 
-      x_old = zx;
-      y_old = zy;
+      xCycle = zx;
+      yCycle = zy;
     }
 
     return 1;
@@ -53,8 +53,8 @@ const calculateMandelbrotSet = (z, x, y, size) => {
   const offsetY = -2 + y * scale;
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
+    let cx = offsetX + (pixelX * scale) / size;
     for (let pixelY = 0; pixelY < size; pixelY++) {
-      let cx = offsetX + (pixelX * scale) / size;
       let cy = offsetY + (pixelY * scale) / size;
 
       let i = 0;
