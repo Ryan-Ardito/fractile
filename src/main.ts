@@ -2,7 +2,7 @@ import DataTile, { Loader } from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
-import { FullScreen, defaults as defaultControls } from "ol/control.js";
+// import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
 const iterations = 2 ** 12;
@@ -27,17 +27,17 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   });
 };
 
-let span = document.createElement("span");
-span.innerHTML = "&#x26F6;";
+// let span = document.createElement("span");
+// span.innerHTML = "&#x26F6;";
 
 const map = new Map({
   target: "map",
-  // controls: [],
-  controls: [
-    new FullScreen({
-      label: span,
-    }),
-  ],
+  controls: [],
+  // controls: [
+  //   new FullScreen({
+  //     label: span,
+  //   }),
+  // ],
   layers: [
     new TileLayer({
       preload: Infinity,
