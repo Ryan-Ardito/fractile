@@ -32,6 +32,7 @@ const map = new Map({
     new TileLayer({
       preload: Infinity,
       source: new DataTile({
+        transition: 0,
         tileSize: size,
         loader: loadTile as Loader,
       }),
