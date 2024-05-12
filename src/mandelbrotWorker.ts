@@ -70,10 +70,10 @@ const calculateMandelbrotSet = (
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
         const i = escapeTime(cx, cy);
-        const brightness = ((i / 256) * 255) | 0;
-        let red = (brightness % 8) * 32;
-        let green = (brightness % 16) * 16;
-        let blue = (brightness % 32) * 8;
+        const value = ((i / 256) * 255) | 0;
+        let red = (value % 8) * 32;
+        let green = (value % 16) * 16;
+        let blue = (value % 32) * 8;
 
         data[index] = red;
         data[index + 1] = green;
