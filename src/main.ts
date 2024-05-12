@@ -1,11 +1,11 @@
-import DataTile, { Loader } from "ol/source/DataTile.js";
-import Map from "ol/Map.js";
-import TileLayer from "ol/layer/WebGLTile.js";
-import View from "ol/View.js";
+import DataTile, { Loader } from "ol/source/DataTile";
+import Map from "ol/Map";
+import TileLayer from "ol/layer/WebGLTile";
+import View from "ol/View";
 
 const size = 512;
 
-const loadTile = (z: number, x: number, y: number) => {
+const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL("./mandelbrotWorker.ts", import.meta.url)

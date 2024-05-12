@@ -9,8 +9,8 @@ const calculateMandelbrotSet = (
   x: number,
   y: number,
   size: number
-) => {
-  const isInCardioidOrBulb = (x_pos: number, y_pos: number) => {
+): Uint8Array => {
+  const isInCardioidOrBulb = (x_pos: number, y_pos: number): boolean => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
     let inCardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
@@ -18,7 +18,7 @@ const calculateMandelbrotSet = (
     return inCardioid || inBulb;
   };
 
-  const escapeTime = (cx: number, cy: number) => {
+  const escapeTime = (cx: number, cy: number): number => {
     let zx = 0;
     let zy = 0;
     let x2 = 0;
