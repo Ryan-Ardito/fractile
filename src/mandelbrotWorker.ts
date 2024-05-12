@@ -3,7 +3,12 @@ const ITERATIONS = 4096;
 const PERIODICITY_THRESHOLD = 1e-9;
 const CYCLE_DETECTION_DELAY = 40;
 
-const calculateMandelbrotSet = (z: number, x: number, y: number, size: number) => {
+const calculateMandelbrotSet = (
+  z: number,
+  x: number,
+  y: number,
+  size: number
+) => {
   const isInCardioidOrBulb = (x_pos: number, y_pos: number) => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
@@ -12,21 +17,26 @@ const calculateMandelbrotSet = (z: number, x: number, y: number, size: number) =
     return inCardioid || inBulb;
   };
 
-  const escapeTime = (cx, cy) => {
+  const escapeTime = (cx: number, cy: number) => {
     let zx = 0;
     let zy = 0;
+    let x2 = 0;
+    let y2 = 0;
     let xCycle = 0;
     let yCycle = 0;
 
     let i = 0;
     while (i < ITERATIONS) {
       for (let s = 0; s < 20; s++) {
-        if (zx * zx + zy * zy > 4) {
+        if (x2 + y2 > 4) {
           return i;
         }
-        let temp = zx * zx - zy * zy + cx;
-        zy = 2 * zx * zy + cy;
-        zx = temp;
+
+        zy = (zx + zx) * zy + cy;
+        zx = x2 - y2 + cx;
+        x2 = zx * zx;
+        y2 = zy * zy;
+
         i++;
 
         if (i >= CYCLE_DETECTION_DELAY) {
