@@ -1,4 +1,7 @@
-const ITERATIONS = 2096;
+const ITERATIONS = 4096;
+
+const PERIODICITY_THRESHOLD = 1e-9;
+const CYCLE_DETECTION_DELAY = 40;
 
 const calculateMandelbrotSet = (z, x, y, size) => {
   const is_in_cardioid_or_bulb = (x_pos, y_pos) => {
@@ -6,7 +9,42 @@ const calculateMandelbrotSet = (z, x, y, size) => {
     let q = Math.pow(x_pos - 0.25, 2) + y2;
     let in_cardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
     let in_bulb = Math.pow(x_pos + 1.0, 2) + y2 < 0.0625;
-    in_cardioid || in_bulb;
+    return in_cardioid || in_bulb;
+  };
+
+  const escapeTime = (cx, cy) => {
+    let zx = 0;
+    let zy = 0;
+    let i = 0;
+
+    let x_old = 0;
+    let y_old = 0;
+
+    while (i < ITERATIONS) {
+      for (s = 0; s < 20; s++) {
+        if (zx * zx + zy * zy > 4 || i >= ITERATIONS) {
+          return i;
+        }
+        let temp = zx * zx - zy * zy + cx;
+        zy = 2 * zx * zy + cy;
+        zx = temp;
+        i++;
+
+        if (i >= CYCLE_DETECTION_DELAY) {
+          let x_visited = Math.abs(x - x_old) < PERIODICITY_THRESHOLD;
+          let y_visited = Math.abs(y - y_old) < PERIODICITY_THRESHOLD;
+
+          if (x_visited && y_visited) {
+            return 0;
+          }
+        }
+      }
+
+      x_old = zx;
+      y_old = zy;
+    }
+
+    return i;
   };
 
   const data = new Uint8Array(size * size * 4);
@@ -17,21 +55,14 @@ const calculateMandelbrotSet = (z, x, y, size) => {
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
     for (let pixelY = 0; pixelY < size; pixelY++) {
-      if (is_in_cardioid_or_bulb(pixelX, pixelY)) {
-        return 0;
-      }
-
-      let zx = 0;
-      let zy = 0;
       let cx = offsetX + (pixelX * scale) / size;
       let cy = offsetY + (pixelY * scale) / size;
-      let i = 0;
 
-      while (zx * zx + zy * zy < 4 && i < ITERATIONS) {
-        let temp = zx * zx - zy * zy + cx;
-        zy = 2 * zx * zy + cy;
-        zx = temp;
-        i++;
+      let i;
+      if (is_in_cardioid_or_bulb(cx, cy)) {
+        i = 1;
+      } else {
+        i = escapeTime(cx, cy);
       }
 
       i = (i - 1) % (ITERATIONS - 1);
