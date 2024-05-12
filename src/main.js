@@ -38,6 +38,7 @@ const map = new Map({
     }),
   ],
   view: new View({
+    maxZoom: 42,
     enableRotation: false,
     center: [0, 0],
     zoom: 0,
