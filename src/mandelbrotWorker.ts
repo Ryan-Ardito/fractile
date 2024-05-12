@@ -1,4 +1,5 @@
 const ITERATIONS = 4096;
+const ALPHA = 255;
 
 const PERIODICITY_THRESHOLD = 1e-9;
 const CYCLE_DETECTION_DELAY = 40;
@@ -36,15 +37,14 @@ const calculateMandelbrotSet = (
         zx = x2 - y2 + cx;
         x2 = zx * zx;
         y2 = zy * zy;
-
         i++;
 
         if (i >= CYCLE_DETECTION_DELAY) {
-          let xVisited = Math.abs(zx - xCycle) < PERIODICITY_THRESHOLD;
-          let yVisited = Math.abs(zy - yCycle) < PERIODICITY_THRESHOLD;
-
-          if (xVisited && yVisited) {
-            return 1;
+          if (
+            Math.abs(zx - xCycle) < PERIODICITY_THRESHOLD &&
+            Math.abs(zy - yCycle) < PERIODICITY_THRESHOLD
+          ) {
+            return 0;
           }
         }
       }
@@ -53,7 +53,7 @@ const calculateMandelbrotSet = (
       yCycle = zy;
     }
 
-    return 1;
+    return 0;
   };
 
   const scale = Math.pow(2, -z) * 4;
@@ -67,23 +67,24 @@ const calculateMandelbrotSet = (
     for (let pixelY = 0; pixelY < size; pixelY++) {
       let cy = offsetY + (pixelY * scale) / size;
 
-      let i = 0;
-      if (!isInCardioidOrBulb(cx, cy)) {
-        i = escapeTime(cx, cy);
-        i = (i - 1) % (ITERATIONS - 1);
-      }
-
-      const brightness = ((i / 256) * 255) | 0;
-      let red = (brightness % 8) * 32;
-      let green = (brightness % 16) * 16;
-      let blue = (brightness % 32) * 8;
-      let alpha = 255;
-
       const index = (pixelY * size + pixelX) * 4;
-      data[index] = red;
-      data[index + 1] = green;
-      data[index + 2] = blue;
-      data[index + 3] = alpha;
+      if (!isInCardioidOrBulb(cx, cy)) {
+        const i = escapeTime(cx, cy);
+        const brightness = ((i / 256) * 255) | 0;
+        let red = (brightness % 8) * 32;
+        let green = (brightness % 16) * 16;
+        let blue = (brightness % 32) * 8;
+
+        data[index] = red;
+        data[index + 1] = green;
+        data[index + 2] = blue;
+        data[index + 3] = ALPHA;
+      } else {
+        data[index] = 0;
+        data[index + 1] = 0;
+        data[index + 2] = 0;
+        data[index + 3] = ALPHA;
+      }
     }
   }
 
