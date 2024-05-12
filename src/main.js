@@ -27,6 +27,7 @@ const loadTile = (z, x, y) => {
 
 const map = new Map({
   target: "map",
+  controls: [],
   layers: [
     new TileLayer({
       preload: Infinity,
