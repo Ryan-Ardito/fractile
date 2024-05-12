@@ -5,7 +5,7 @@ import View from "ol/View";
 // import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
-const iterations = 2 ** 12;
+const iterations = 256;
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
@@ -23,7 +23,13 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       reject(error);
     };
 
-    worker.postMessage({ z, x, y, size, iterations });
+    worker.postMessage({
+      z,
+      x,
+      y,
+      size,
+      iterations: iterations + iterations * z,
+    });
   });
 };
 
