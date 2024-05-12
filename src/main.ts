@@ -1,14 +1,14 @@
-import DataTile from "ol/source/DataTile.js";
+import DataTile, { Loader } from "ol/source/DataTile.js";
 import Map from "ol/Map.js";
 import TileLayer from "ol/layer/WebGLTile.js";
 import View from "ol/View.js";
 
 const size = 512;
 
-const loadTile = (z, x, y) => {
+const loadTile = (z: number, x: number, y: number) => {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
-      new URL("./mandelbrotWorker.js", import.meta.url)
+      new URL("./mandelbrotWorker.ts", import.meta.url)
     );
     worker.onmessage = (e) => {
       const data = e.data;
@@ -33,7 +33,7 @@ const map = new Map({
       preload: Infinity,
       source: new DataTile({
         tileSize: size,
-        loader: loadTile,
+        loader: loadTile as Loader,
       }),
     }),
   ],

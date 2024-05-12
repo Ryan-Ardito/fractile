@@ -3,8 +3,8 @@ const ITERATIONS = 4096;
 const PERIODICITY_THRESHOLD = 1e-9;
 const CYCLE_DETECTION_DELAY = 40;
 
-const calculateMandelbrotSet = (z, x, y, size) => {
-  const is_in_cardioid_or_bulb = (x_pos, y_pos) => {
+const calculateMandelbrotSet = (z: number, x: number, y: number, size: number) => {
+  const is_in_cardioid_or_bulb = (x_pos: number, y_pos: number) => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
     let inCardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
@@ -46,11 +46,11 @@ const calculateMandelbrotSet = (z, x, y, size) => {
     return 1;
   };
 
-  const data = new Uint8Array(size * size * 4);
-
   const scale = Math.pow(2, -z) * 4;
   const offsetX = -2 + x * scale;
   const offsetY = -2 + y * scale;
+
+  const data = new Uint8Array(size * size * 4);
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
     let cx = offsetX + (pixelX * scale) / size;
