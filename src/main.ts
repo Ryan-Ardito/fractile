@@ -5,7 +5,23 @@ import View from "ol/View";
 // import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
-const iterations = 256;
+const BASE_ITERATIONS = 256;
+
+// default zoom, center and rotation
+let zoom = 2;
+let center = [0, 0];
+let rotation = 0;
+
+if (window.location.hash !== "") {
+  // try to restore center, zoom-level and rotation from the URL
+  const hash = window.location.hash.replace("#map=", "");
+  const parts = hash.split("/");
+  if (parts.length === 4) {
+    zoom = parseFloat(parts[0]);
+    center = [parseFloat(parts[1]), parseFloat(parts[2])];
+    rotation = parseFloat(parts[3]);
+  }
+}
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
@@ -28,7 +44,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       x,
       y,
       size,
-      iterations: iterations + iterations * z,
+      iterations: BASE_ITERATIONS + BASE_ITERATIONS * z,
     });
   });
 };
@@ -56,9 +72,49 @@ const map = new Map({
     }),
   ],
   view: new View({
+    minZoom: 0,
     maxZoom: 42,
     enableRotation: false,
-    center: [0, 0],
-    zoom: 0,
+    center,
+    zoom,
   }),
+});
+
+let shouldUpdate = true;
+const view = map.getView();
+const updatePermalink = function () {
+  if (!shouldUpdate) {
+    // do not update the URL when the view was changed in the 'popstate' handler
+    shouldUpdate = true;
+    return;
+  }
+
+  const center = view.getCenter();
+  const zoom = view.getZoom();
+  if (!center || !view || !zoom) {
+    return;
+  }
+  const hash = `#map=${zoom.toFixed(
+    2
+  )}/${center[0].toString()}/${center[1].toString()}`;
+  const state = {
+    zoom: view.getZoom(),
+    center: view.getCenter(),
+    rotation: view.getRotation(),
+  };
+  window.history.pushState(state, "map", hash);
+};
+
+map.on("moveend", updatePermalink);
+
+// restore the view state when navigating through the history, see
+// https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onpopstate
+window.addEventListener("popstate", function (event) {
+  if (event.state === null) {
+    return;
+  }
+  map.getView().setCenter(event.state.center);
+  map.getView().setZoom(event.state.zoom);
+  map.getView().setRotation(event.state.rotation);
+  shouldUpdate = false;
 });
