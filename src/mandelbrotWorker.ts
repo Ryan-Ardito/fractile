@@ -4,7 +4,7 @@ const PERIODICITY_THRESHOLD = 1e-9;
 const CYCLE_DETECTION_DELAY = 40;
 
 const calculateMandelbrotSet = (z: number, x: number, y: number, size: number) => {
-  const is_in_cardioid_or_bulb = (x_pos: number, y_pos: number) => {
+  const isInCardioidOrBulb = (x_pos: number, y_pos: number) => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
     let inCardioid = q * (q + (x_pos - 0.25)) < 0.25 * y2;
@@ -58,7 +58,7 @@ const calculateMandelbrotSet = (z: number, x: number, y: number, size: number) =
       let cy = offsetY + (pixelY * scale) / size;
 
       let i = 0;
-      if (!is_in_cardioid_or_bulb(cx, cy)) {
+      if (!isInCardioidOrBulb(cx, cy)) {
         i = escapeTime(cx, cy);
         i = (i - 1) % (ITERATIONS - 1);
       }
