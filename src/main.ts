@@ -50,6 +50,7 @@ const map = new Map({
     }),
   ],
   view: new View({
+    constrainResolution: true,
     maxZoom: 42,
     enableRotation: false,
     center: [0, 0],
