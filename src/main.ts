@@ -96,7 +96,7 @@ const updatePermalink = function () {
     zoom: view.getZoom(),
     center: view.getCenter(),
   };
-  window.history.pushState(state, "map", hash);
+  window.history.replaceState(state, "map", hash);
 };
 
 map.on("moveend", updatePermalink);
