@@ -26,6 +26,7 @@ const loadTile = (z, x, y) => {
 };
 
 const map = new Map({
+  pixelRatio: 2,
   target: "map",
   controls: [],
   layers: [
