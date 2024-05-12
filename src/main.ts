@@ -2,9 +2,10 @@ import DataTile, { Loader } from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
+import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
-const iterations = 4096;
+const iterations = 2 ** 12;
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
@@ -26,13 +27,22 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   });
 };
 
+let span = document.createElement("span");
+span.innerHTML = "&#x26F6;";
+
 const map = new Map({
   target: "map",
-  controls: [],
+  // controls: [],
+  controls: [
+    new FullScreen({
+      label: span,
+    }),
+  ],
   layers: [
     new TileLayer({
       preload: Infinity,
       source: new DataTile({
+        // interpolate: true,
         transition: 0,
         tileSize: size,
         loader: loadTile as Loader,
