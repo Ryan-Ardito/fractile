@@ -64,15 +64,15 @@ const calculateMandelbrotSet = (z, x, y, size) => {
       }
 
       const brightness = ((i / 256) * 255) | 0;
-      // let red = (brightness % 8) * 32;
-      // let green = (brightness % 16) * 16;
-      // let blue = (brightness % 32) * 8;
+      let red = (brightness % 8) * 32;
+      let green = (brightness % 16) * 16;
+      let blue = (brightness % 32) * 8;
       let alpha = 255;
 
       const index = (pixelY * size + pixelX) * 4;
-      data[index] = brightness;
-      data[index + 1] = brightness;
-      data[index + 2] = brightness;
+      data[index] = red;
+      data[index + 1] = green;
+      data[index + 2] = blue;
       data[index + 3] = alpha;
     }
   }
