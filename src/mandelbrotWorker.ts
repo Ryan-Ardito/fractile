@@ -1,4 +1,3 @@
-const ITERATIONS = 4096;
 const ALPHA = 255;
 
 const PERIODICITY_THRESHOLD = 1e-9;
@@ -8,7 +7,8 @@ const calculateMandelbrotSet = (
   z: number,
   x: number,
   y: number,
-  size: number
+  size: number,
+  iterations: number
 ): Uint8Array => {
   const isInCardioidOrBulb = (x_pos: number, y_pos: number): boolean => {
     let y2 = Math.pow(y_pos, 2);
@@ -18,7 +18,7 @@ const calculateMandelbrotSet = (
     return inCardioid || inBulb;
   };
 
-  const escapeTime = (cx: number, cy: number): number => {
+  const escapeTime = (cx: number, cy: number, iterations: number): number => {
     let zx = 0;
     let zy = 0;
     let x2 = 0;
@@ -27,7 +27,7 @@ const calculateMandelbrotSet = (
     let yCycle = 0;
 
     let i = 0;
-    while (i < ITERATIONS) {
+    while (i < iterations) {
       for (let s = 0; s < 20; s++) {
         if (x2 + y2 > 4) {
           return i;
@@ -69,7 +69,7 @@ const calculateMandelbrotSet = (
 
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
-        const i = escapeTime(cx, cy);
+        const i = escapeTime(cx, cy, iterations);
         const value = ((i / 256) * 255) | 0;
         let red = (value % 8) * 32;
         let green = (value % 16) * 16;
@@ -92,7 +92,7 @@ const calculateMandelbrotSet = (
 };
 
 onmessage = (e) => {
-  const { z, x, y, size } = e.data;
-  const mandelbrotData = calculateMandelbrotSet(z, x, y, size);
+  const { z, x, y, size, iterations } = e.data;
+  const mandelbrotData = calculateMandelbrotSet(z, x, y, size, iterations);
   postMessage(mandelbrotData);
 };

@@ -4,6 +4,7 @@ import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 
 const size = 512;
+const iterations = 4096;
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
@@ -21,7 +22,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       reject(error);
     };
 
-    worker.postMessage({ z, x, y, size });
+    worker.postMessage({ z, x, y, size, iterations });
   });
 };
 
