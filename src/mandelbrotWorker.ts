@@ -10,6 +10,9 @@ const calculateMandelbrotSet = (
   size: number,
   iterations: number
 ): Uint8Array => {
+  // hacky black real line fix
+  z += PERIODICITY_THRESHOLD;
+
   const isInCardioidOrBulb = (x_pos: number, y_pos: number): boolean => {
     let y2 = Math.pow(y_pos, 2);
     let q = Math.pow(x_pos - 0.25, 2) + y2;
