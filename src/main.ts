@@ -14,6 +14,7 @@ if (window.location.hash !== "") {
   const hash = window.location.hash.replace("#map=", "");
   const parts = hash.split("/");
   if (parts.length === 3) {
+    console.log(parts);
     zoom = parseFloat(parts[0]);
     center = [parseFloat(parts[1]), parseFloat(parts[2])];
   }
@@ -90,9 +91,7 @@ const updatePermalink = function () {
   if (!center || !view || !zoom) {
     return;
   }
-  const hash = `#map=${zoom.toFixed(
-    2
-  )}/${center[0].toString()}/${center[1].toString()}`;
+  const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
   const state = {
     zoom: view.getZoom(),
     center: view.getCenter(),
