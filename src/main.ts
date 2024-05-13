@@ -2,13 +2,12 @@ import DataTile, { Loader } from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
-// import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
 const BASE_ITERATIONS = 512;
 
-let zoom = 2;
-let center = [0, 0];
+let zoom = 2.5;
+let center = [-5000000, 0];
 
 if (window.location.hash !== "") {
   const hash = window.location.hash.replace("#map=", "");
@@ -46,18 +45,10 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   });
 };
 
-// let span = document.createElement("span");
-// span.innerHTML = "&#x26F6;";
-
 const map = new Map({
   maxTilesLoading: 8,
   target: "map",
   controls: [],
-  // controls: [
-  //   new FullScreen({
-  //     label: span,
-  //   }),
-  // ],
   layers: [
     new TileLayer({
       preload: Infinity,
@@ -70,6 +61,9 @@ const map = new Map({
     }),
   ],
   view: new View({
+    multiWorld: true,
+    extent: [-80000000, -40000000, 60000000, 40000000],
+    minZoom: 2,
     maxZoom: 42,
     enableRotation: false,
     center,
