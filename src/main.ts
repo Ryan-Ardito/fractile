@@ -5,7 +5,7 @@ import View from "ol/View";
 // import { FullScreen, defaults as defaultControls } from "ol/control.js";
 
 const size = 512;
-const BASE_ITERATIONS = 256;
+const BASE_ITERATIONS = 512;
 
 let zoom = 2;
 let center = [0, 0];
@@ -69,7 +69,6 @@ const map = new Map({
     }),
   ],
   view: new View({
-    minZoom: 0,
     maxZoom: 42,
     enableRotation: false,
     center,
