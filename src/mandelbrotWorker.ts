@@ -2,6 +2,7 @@ const ALPHA = 255;
 
 const PERIODICITY_THRESHOLD = 1e-9;
 const CYCLE_DETECTION_DELAY = 40;
+const PALETTE_SCALE = 200;
 
 const calculateMandelbrotSet = (
   z: number,
@@ -74,7 +75,7 @@ const calculateMandelbrotSet = (
       if (!isInCardioidOrBulb(cx, cy)) {
         const escape = escapeTime(cx, cy, iterations);
         const nomalized = escape % iterations;
-        const value = (nomalized / (256 + 256 * Math.log2(nomalized))) * 255;
+        const value = (nomalized / (256 + PALETTE_SCALE * Math.log2(nomalized))) * 255;
         let red = (value % 8) * 32;
         let green = (value % 16) * 16;
         let blue = (value % 32) * 8;
