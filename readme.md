@@ -1,5 +1,3 @@
-# Fractile
-A slippy mandelbrot viewer with minimal UI and good performance.
 ## Features
 - Caching
 - Preloading
