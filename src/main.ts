@@ -50,6 +50,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 // span.innerHTML = "&#x26F6;";
 
 const map = new Map({
+  maxTilesLoading: 8,
   target: "map",
   controls: [],
   // controls: [
