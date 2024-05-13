@@ -1,4 +1,4 @@
-import DataTile, { Loader } from "ol/source/DataTile";
+import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
@@ -51,12 +51,13 @@ const map = new Map({
   controls: [],
   layers: [
     new TileLayer({
+      extent: [-80000000, -40000000, 60000000, 40000000],
       preload: Infinity,
       source: new DataTile({
         interpolate: true,
         transition: 0,
         tileSize: size,
-        loader: loadTile as Loader,
+        loader: loadTile,
       }),
     }),
   ],
@@ -73,7 +74,7 @@ const map = new Map({
 
 let shouldUpdate = true;
 const view = map.getView();
-const updatePermalink = function () {
+const updatePermalink = () => {
   if (!shouldUpdate) {
     // do not update the URL when the view was changed in the 'popstate' handler
     shouldUpdate = true;
@@ -97,7 +98,7 @@ map.on("moveend", updatePermalink);
 
 // restore the view state when navigating through the history, see
 // https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onpopstate
-window.addEventListener("popstate", function (event) {
+window.addEventListener("popstate", (event) => {
   if (event.state === null) {
     return;
   }
@@ -105,3 +106,31 @@ window.addEventListener("popstate", function (event) {
   map.getView().setZoom(event.state.zoom);
   shouldUpdate = false;
 });
+
+const wakeTime = 1000;
+let timeout: number;
+let currentCursor = document.body.style.cursor;
+currentCursor == "none" ? "default" : currentCursor;
+
+const hideMouseCursor = () => {
+  if (document.body.style.cursor !== "none") {
+    document.body.style.cursor = "none";
+  }
+};
+
+const showMouseCursor = () => {
+  clearTimeout(timeout);
+  if (document.body.style.cursor !== "default") {
+    document.body.style.cursor = "default";
+  }
+};
+
+document.onmousemove = () => {
+  showMouseCursor();
+  timeout = setTimeout(hideMouseCursor, wakeTime);
+};
+
+document.onmousedown = () => {
+  showMouseCursor();
+  timeout = setTimeout(hideMouseCursor, wakeTime);
+};
