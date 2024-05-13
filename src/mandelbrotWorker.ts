@@ -1,6 +1,6 @@
 const ALPHA = 255;
 
-const PERIODICITY_THRESHOLD = 1e-9;
+const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
 const PALETTE_SCALE = 200;
 
@@ -12,7 +12,7 @@ const calculateMandelbrotSet = (
   iterations: number
 ): Uint8Array => {
   // hacky black real line fix
-  z += PERIODICITY_THRESHOLD;
+  z += 1e-9;
 
   const isInCardioidOrBulb = (x: number, y: number): boolean => {
     let y2 = y * y;
@@ -67,9 +67,9 @@ const calculateMandelbrotSet = (
   const colorPixel = (normalized: number) => {
     const value =
       (normalized / (256 + PALETTE_SCALE * Math.log2(normalized))) * 255;
-    let red = (value % 8) * 32;
-    let green = (value % 16) * 16;
-    let blue = (value % 32) * 8;
+    const red = (value % 8) * 32;
+    const green = (value % 16) * 16;
+    const blue = (value % 32) * 8;
 
     return [red, green, blue];
   };
