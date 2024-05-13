@@ -87,9 +87,31 @@ const calculateMandelbrotSet = (
 
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
-        const escape = escapeTime(cx, cy, iterations);
+        const subPixelOffset = scale / size / 4;
+        const top_left = escapeTime(
+          cx - subPixelOffset,
+          cy + subPixelOffset,
+          iterations
+        );
+        const top_right = escapeTime(
+          cx + subPixelOffset,
+          cy + scale / size / 4,
+          iterations
+        );
+        const bottom_left = escapeTime(
+          cx - scale / size / 4,
+          cy - scale / size / 4,
+          iterations
+        );
+        const bottom_right = escapeTime(
+          cx + scale / size / 4,
+          cy - scale / size / 4,
+          iterations
+        );
+        const avg_escape =
+          (top_left + top_right + bottom_left + bottom_right) / 4;
 
-        const normalized = escape % iterations;
+        const normalized = avg_escape % iterations;
         const [red, green, blue] = colorPixel(normalized);
 
         data[index] = red;
