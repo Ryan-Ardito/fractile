@@ -3,7 +3,7 @@ import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 
-const size = 512;
+const SIZE = 256;
 const BASE_ITERATIONS = 512;
 
 let zoom = 2.5;
@@ -39,14 +39,14 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       z,
       x,
       y,
-      size,
+      size: SIZE,
       iterations: BASE_ITERATIONS + BASE_ITERATIONS * z,
     });
   });
 };
 
 const map = new Map({
-  maxTilesLoading: 8,
+  maxTilesLoading: navigator.hardwareConcurrency,
   target: "map",
   controls: [],
   layers: [
@@ -56,7 +56,7 @@ const map = new Map({
       source: new DataTile({
         interpolate: true,
         transition: 0,
-        tileSize: size,
+        tileSize: SIZE,
         loader: loadTile,
       }),
     }),
