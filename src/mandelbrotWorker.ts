@@ -77,6 +77,7 @@ const calculateMandelbrotSet = (
   const scale = Math.pow(2, -z) * 4;
   const offsetX = -2 + x * scale;
   const offsetY = -2 + y * scale;
+  const subPixelOffset = scale / size / 4;
 
   const data = new Uint8Array(size * size * 4);
 
@@ -87,7 +88,6 @@ const calculateMandelbrotSet = (
 
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
-        const subPixelOffset = scale / size / 4;
         const top_left = escapeTime(
           cx - subPixelOffset,
           cy + subPixelOffset,
@@ -95,17 +95,17 @@ const calculateMandelbrotSet = (
         );
         const top_right = escapeTime(
           cx + subPixelOffset,
-          cy + scale / size / 4,
+          cy + subPixelOffset,
           iterations
         );
         const bottom_left = escapeTime(
-          cx - scale / size / 4,
-          cy - scale / size / 4,
+          cx - subPixelOffset,
+          cy - subPixelOffset,
           iterations
         );
         const bottom_right = escapeTime(
-          cx + scale / size / 4,
-          cy - scale / size / 4,
+          cx + subPixelOffset,
+          cy - subPixelOffset,
           iterations
         );
         const avg_escape =
