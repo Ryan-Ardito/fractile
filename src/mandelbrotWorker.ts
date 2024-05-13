@@ -47,7 +47,7 @@ const calculateMandelbrotSet = (
             Math.abs(zx - xCycle) < PERIODICITY_THRESHOLD &&
             Math.abs(zy - yCycle) < PERIODICITY_THRESHOLD
           ) {
-            return 0;
+            return iterations;
           }
         }
       }
@@ -56,7 +56,7 @@ const calculateMandelbrotSet = (
       yCycle = zy;
     }
 
-    return 0;
+    return iterations;
   };
 
   const scale = Math.pow(2, -z) * 4;
@@ -72,8 +72,9 @@ const calculateMandelbrotSet = (
 
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
-        const i = escapeTime(cx, cy, iterations);
-        const value = ((i / 256) * 255) | 0;
+        const escape = escapeTime(cx, cy, iterations);
+        const nomalized = escape % iterations;
+        const value = (nomalized / (256 + 256 * Math.log2(nomalized))) * 255;
         let red = (value % 8) * 32;
         let green = (value % 16) * 16;
         let blue = (value % 32) * 8;
