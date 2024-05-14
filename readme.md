@@ -1,3 +1,16 @@
+# Mandelbrot Viewer
+## Controls
+### Desktop
+- **Click-and-drag**: Pan
+- **Scroll wheel**: Zoom in/out
+- **Shift + drag**: Zoom to selection
+- **F11**: Fullscreen
+- **Double-click**: Zoom in
+- **Shift + double-click**: Zoom out
+### Mobile
+- **Pinch**: Zoom in/out
+- **Drag**: Pan
+- **Double-tap**: Zoom in
 ## Features
 - Caching
 - Preloading
@@ -6,5 +19,5 @@
 - Parallel processing
 - Progressive rendering
 - Fast logarithmic coloring
-- Iterations increase with zoom
+- Dynamic max iteration scaling
 - Location data in URL for sharing
