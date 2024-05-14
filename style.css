@@ -15,3 +15,16 @@ html, body {
   width: 100%;
   height: 100%;
 }
+
+.about-info {
+  color: white;
+  position: fixed;
+  bottom: 6px;
+  right: 8px;
+  z-index: 1000;
+}
+
+.github-link {
+  color: white;
+  font-size: 1.1rem;
+}
