@@ -7,7 +7,7 @@ const SIZE = 256;
 const BASE_ITERATIONS = 1024;
 
 const locationFromHash = (hash: string): [number, [number, number]] => {
-  const trim_hash = window.location.hash.replace("#map=", "");
+  const trim_hash = hash.replace("#map=", "");
   const parts = trim_hash.split("/");
   if (parts.length === 3) {
     const zoom = parseFloat(parts[0]);
@@ -35,6 +35,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
     const worker = new Worker(
       new URL("./mandelbrotWorker.ts", import.meta.url)
     );
+
     worker.onmessage = (e) => {
       const data = e.data;
       worker.terminate();
@@ -91,17 +92,18 @@ const updatePermalink = () => {
     shouldUpdate = true;
     return;
   }
-
   const center = view.getCenter();
   const zoom = view.getZoom();
   if (!center || !view || !zoom) {
     return;
   }
+
   const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
   const state = {
     zoom: view.getZoom(),
     center: view.getCenter(),
   };
+
   window.history.replaceState(state, "map", hash);
 };
 
@@ -128,8 +130,6 @@ window.addEventListener("popstate", (event) => {
 
 const wakeTime = 1000;
 let timeout: number;
-let currentCursor = document.body.style.cursor;
-currentCursor == "none" ? "default" : currentCursor;
 
 const hideMouseCursor = () => {
   if (document.body.style.cursor !== "none") {
