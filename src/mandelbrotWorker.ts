@@ -73,8 +73,9 @@ const calculateMandelbrotSet = (
     const hue =
       ((normalized * 360) / (100 + PALETTE_SCALE * Math.log2(normalized))) %
       360;
-    const saturation = 0.5;
-    const lightness = 0.5 + 0.15 * Math.sin(normalized * 0.1);
+    const variance = 0.42 + 0.28 * Math.sin(normalized * 0.1);
+    const saturation = variance;
+    const lightness = variance;
 
     const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
     const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
