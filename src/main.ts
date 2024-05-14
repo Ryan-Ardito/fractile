@@ -6,17 +6,28 @@ import View from "ol/View";
 const SIZE = 256;
 const BASE_ITERATIONS = 1024;
 
-let zoom = 2.5;
-let center = [-5000000, 0];
-
-if (window.location.hash !== "") {
-  const hash = window.location.hash.replace("#map=", "");
-  const parts = hash.split("/");
+const locationFromHash = (hash: string): [number, [number, number]] => {
+  const trim_hash = window.location.hash.replace("#map=", "");
+  const parts = trim_hash.split("/");
   if (parts.length === 3) {
-    console.log(parts);
-    zoom = parseFloat(parts[0]);
-    center = [parseFloat(parts[1]), parseFloat(parts[2])];
+    const zoom = parseFloat(parts[0]);
+    const center: [number, number] = [
+      parseFloat(parts[1]),
+      parseFloat(parts[2]),
+    ];
+    return [zoom, center];
+  } else {
+    throw new Error("invalid location hash");
   }
+};
+
+let zoom = 2.5;
+let center: [number, number] = [-5000000, 0];
+
+if (window.location.hash) {
+  try {
+    [zoom, center] = locationFromHash(window.location.hash);
+  } catch {}
 }
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
@@ -77,7 +88,6 @@ let shouldUpdate = true;
 const view = map.getView();
 const updatePermalink = () => {
   if (!shouldUpdate) {
-    // do not update the URL when the view was changed in the 'popstate' handler
     shouldUpdate = true;
     return;
   }
@@ -97,8 +107,16 @@ const updatePermalink = () => {
 
 map.on("moveend", updatePermalink);
 
-// restore the view state when navigating through the history, see
-// https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onpopstate
+window.addEventListener("hashchange", (ev) => {
+  try {
+    const url = ev.newURL;
+    const hash = url.substring(url.indexOf("#"));
+    const [zoom, center] = locationFromHash(hash);
+    map.getView().setCenter(center);
+    map.getView().setZoom(zoom);
+  } catch {}
+});
+
 window.addEventListener("popstate", (event) => {
   if (event.state === null) {
     return;
