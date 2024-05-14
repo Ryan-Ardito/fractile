@@ -46,6 +46,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 };
 
 const map = new Map({
+  pixelRatio: window.devicePixelRatio,
   maxTilesLoading: navigator.hardwareConcurrency,
   target: "map",
   controls: [],
