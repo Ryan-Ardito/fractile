@@ -4,7 +4,7 @@ import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 
 const SIZE = 256;
-const BASE_ITERATIONS = 512;
+const BASE_ITERATIONS = 1024;
 
 let zoom = 2.5;
 let center = [-5000000, 0];
