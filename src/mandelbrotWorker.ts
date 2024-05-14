@@ -2,6 +2,7 @@ const ALPHA = 255;
 
 const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
+const CYCLE_MEMORY_INTERVAL = 20;
 const PALETTE_SCALE = 200;
 
 const calculateMandelbrotSet = (
@@ -36,7 +37,7 @@ const calculateMandelbrotSet = (
 
     let i = 0;
     while (i < maxIterations) {
-      for (let s = 0; s < 20; s++) {
+      for (let s = 0; s < CYCLE_MEMORY_INTERVAL; s++) {
         if (x2 + y2 > 4) {
           return i;
         }
