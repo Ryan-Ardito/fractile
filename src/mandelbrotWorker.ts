@@ -74,7 +74,7 @@ const calculateMandelbrotSet = (
       ((normalizedIters * 360) / (PALETTE_SCALE * Math.log2(normalizedIters))) %
       360;
     const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
-    const saturation = variance;
+    const saturation = variance * 0.9;
     const lightness = normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
 
     const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
