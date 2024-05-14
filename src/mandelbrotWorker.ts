@@ -3,7 +3,6 @@ const ALPHA = 255;
 const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
 const CYCLE_MEMORY_INTERVAL = 20;
-const PALETTE_SCALE = 200;
 
 const calculateMandelbrotSet = (
   z: number,
@@ -65,7 +64,50 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const colorPixel = (normalized: number) => {
+  const PALETTE_SCALE = 100;
+
+  const colorPixel = (normalized: number): number[] => {
+    if (normalized === 0) {
+      return [0, 0, 0];
+    }
+    const hue =
+      ((normalized * 360) / (100 + PALETTE_SCALE * Math.log2(normalized))) %
+      360;
+    const saturation = 0.5;
+    const lightness = 0.5 + 0.15 * Math.sin(normalized * 0.1);
+
+    const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = lightness - c / 2;
+
+    let red = 0,
+      green = 0,
+      blue = 0;
+    if (hue < 60) {
+      red = c;
+      green = x;
+    } else if (hue < 180) {
+      red = x;
+      green = c;
+    } else if (hue < 240) {
+      green = c;
+      blue = x;
+    } else if (hue < 300) {
+      green = x;
+      blue = c;
+    } else {
+      red = x;
+      blue = c;
+    }
+
+    red = Math.round((red + m) * 255);
+    green = Math.round((green + m) * 255);
+    blue = Math.round((blue + m) * 255);
+
+    return [red, green, blue];
+  };
+
+  const colorPixelFast = (normalized: number) => {
     const value =
       (normalized / (256 + PALETTE_SCALE * Math.log2(normalized))) * 255;
     const red = (value % 8) * 32;
