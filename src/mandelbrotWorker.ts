@@ -64,7 +64,7 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const PALETTE_SCALE = 100;
+  const PALETTE_SCALE = 20;
 
   const colorPixel = (normalized: number): number[] => {
     if (normalized === 0) {
