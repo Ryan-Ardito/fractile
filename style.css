@@ -4,7 +4,7 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background-color: rgb(165, 69, 63);
+  background-color: black;
   --ol-partial-background-color: rgba(255, 255, 255, 0.2);
 }
 

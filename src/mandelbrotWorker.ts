@@ -64,18 +64,18 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const PALETTE_SCALE = 20;
+  const PALETTE_SCALE = 48;
 
-  const colorPixel = (normalized: number): number[] => {
-    if (normalized === 0) {
+  const colorPixel = (normalizedIters: number): number[] => {
+    if (normalizedIters === 0) {
       return [0, 0, 0];
     }
     const hue =
-      ((normalized * 360) / (100 + PALETTE_SCALE * Math.log2(normalized))) %
+      ((normalizedIters * 360) / (PALETTE_SCALE + PALETTE_SCALE * Math.log2(normalizedIters))) %
       360;
-    const variance = 0.42 + 0.28 * Math.sin(normalized * 0.1);
+    const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
     const saturation = variance;
-    const lightness = variance;
+    const lightness = normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
 
     const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
     const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
