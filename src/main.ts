@@ -62,7 +62,7 @@ const extent = [-80000000, -40000000, 60000000, 40000000];
 const view = new View({
   multiWorld: true,
   extent,
-  minZoom: 1,
+  minZoom: 1.2,
   maxZoom: 42,
   enableRotation: false,
   center,
