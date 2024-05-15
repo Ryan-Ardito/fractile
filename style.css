@@ -17,7 +17,9 @@ html, body {
 }
 
 .about-info {
-  color: white;
+  font-family: sans-serif;
+  opacity: 60%;
+  color: lightgray;
   position: fixed;
   bottom: 6px;
   right: 8px;
@@ -26,5 +28,4 @@ html, body {
 
 .github-link {
   color: white;
-  font-size: 1rem;
 }
