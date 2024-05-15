@@ -52,56 +52,60 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       x,
       y,
       size: SIZE,
-      iterations: BASE_ITERATIONS + BASE_ITERATIONS * z,
+      iterations: BASE_ITERATIONS * z,
     });
   });
 };
+
+const extent = [-80000000, -40000000, 60000000, 40000000];
+
+const view = new View({
+  multiWorld: true,
+  extent,
+  minZoom: 2,
+  maxZoom: 42,
+  enableRotation: false,
+  center,
+  zoom,
+});
+
+const layer = new TileLayer({
+  extent,
+  preload: Infinity,
+  source: new DataTile({
+    interpolate: true,
+    transition: 0,
+    tileSize: SIZE,
+    loader: loadTile,
+  }),
+});
 
 const map = new Map({
   pixelRatio: window.devicePixelRatio,
   maxTilesLoading: navigator.hardwareConcurrency,
   target: "map",
   controls: [],
-  layers: [
-    new TileLayer({
-      extent: [-80000000, -40000000, 60000000, 40000000],
-      preload: Infinity,
-      source: new DataTile({
-        interpolate: true,
-        transition: 0,
-        tileSize: SIZE,
-        loader: loadTile,
-      }),
-    }),
-  ],
-  view: new View({
-    multiWorld: true,
-    extent: [-80000000, -40000000, 60000000, 40000000],
-    minZoom: 2,
-    maxZoom: 42,
-    enableRotation: false,
-    center,
-    zoom,
-  }),
+  layers: [layer],
+  view,
 });
 
 let shouldUpdate = true;
-const view = map.getView();
+const mapView = map.getView();
 const updatePermalink = () => {
   if (!shouldUpdate) {
     shouldUpdate = true;
     return;
   }
-  const center = view.getCenter();
-  const zoom = view.getZoom();
-  if (!center || !view || !zoom) {
+  const center = mapView.getCenter();
+  const zoom = mapView.getZoom();
+  if (!center || !mapView || !zoom) {
     return;
   }
 
   const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
   const state = {
-    zoom: view.getZoom(),
-    center: view.getCenter(),
+    zoom: mapView.getZoom(),
+    center: mapView.getCenter(),
   };
 
   window.history.replaceState(state, "map", hash);
