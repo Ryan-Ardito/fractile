@@ -39,8 +39,8 @@ const calculateMandelbrotSet = (
     let i = 0;
     while (i < maxIterations) {
       for (let s = 0; s < CYCLE_MEMORY_INTERVAL; s++) {
-        if (x2 + y2 > 4) {
-          return i;
+        if (x2 + y2 > 8) {
+          return i + 2 - Math.log(Math.log(x2 + y2)) / Math.log(2);
         }
 
         zy = (zx + zx) * zy + cy;
@@ -66,9 +66,9 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const scale = 2 ** -z * 4;
-  const offsetX = -2 + x * scale;
-  const offsetY = -2 + y * scale;
+  const scale = 2 ** -z * 8;
+  const offsetX = -4 + x * scale;
+  const offsetY = -4 + y * scale;
 
   const data = new Uint8Array(size * size * 4);
 

@@ -13,7 +13,7 @@ export const colorPixel = (normalizedIters: number): RGB => {
     ((normalizedIters * 360) / (PALETTE_SCALE * Math.log2(normalizedIters)) +
       PALETTE_OFFSET) %
     360;
-  const variance = 0.42 + 0.24 * Math.sin(normalizedIters * 0.1);
+  const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
   const saturation = variance * 0.8;
   const lightness =
     normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
