@@ -1,5 +1,15 @@
+const HUE_SCALE = 360;
+const BASE_CONTRAST = 0.42;
+
 const PALETTE_SCALE = 64;
 const PALETTE_OFFSET = 0;
+
+const BAND_SPACING = 10;
+const BAND_CONTRAST = 0.28;
+const BAND_OFFSET = 0;
+
+const SATURATION = 0.8;
+const LIGHTNESS = 1;
 
 type HSL = [number, number, number];
 type RGB = [number, number, number];
@@ -10,13 +20,16 @@ export const colorPixel = (normalizedIters: number): RGB => {
   }
 
   const hue =
-    ((normalizedIters * 360) / (PALETTE_SCALE * Math.log2(normalizedIters)) +
+    ((normalizedIters * HUE_SCALE) /
+      (PALETTE_SCALE * Math.log2(normalizedIters)) +
       PALETTE_OFFSET) %
     360;
-  const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
-  const saturation = variance * 0.8;
+  const variance =
+    BASE_CONTRAST +
+    BAND_CONTRAST * Math.sin((normalizedIters + BAND_OFFSET) / BAND_SPACING);
+  const saturation = SATURATION * variance;
   const lightness =
-    normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
+    normalizedIters < 24 ? (normalizedIters - 1) / 38 : LIGHTNESS * variance;
 
   return hslToRgb([hue, saturation, lightness]);
 };
