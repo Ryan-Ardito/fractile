@@ -1,11 +1,15 @@
 const PALETTE_SCALE = 64;
 const PALETTE_OFFSET = 0;
 
-export const colorPixel = (escapeIters: number, maxIters: number): number[] => {
+type RGB = [number, number, number];
+
+export const colorPixel = (escapeIters: number, maxIters: number): RGB => {
   const normalizedIters = escapeIters % maxIters;
+
   if (normalizedIters === 0) {
     return [0, 0, 0];
   }
+
   const hue =
     ((normalizedIters * 360) / (PALETTE_SCALE * Math.log2(normalizedIters)) +
       PALETTE_OFFSET) %
@@ -49,7 +53,7 @@ export const colorPixel = (escapeIters: number, maxIters: number): number[] => {
   return [red, green, blue];
 };
 
-export const colorPixelFast = (normalized: number) => {
+export const colorPixelFast = (normalized: number): RGB => {
   const value =
     (normalized / (256 + PALETTE_SCALE * Math.log2(normalized))) * 255;
   const red = (value % 8) * 32;

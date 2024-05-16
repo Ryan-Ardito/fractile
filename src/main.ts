@@ -2,19 +2,20 @@ import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
+import { Extent } from "ol/extent";
+
+type MapCoords = [number, number];
+type ZoomCoords = [number, MapCoords];
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
 
-const locationFromHash = (hash: string): [number, [number, number]] => {
+const locationFromHash = (hash: string): ZoomCoords => {
   const trim_hash = hash.replace("#map=", "");
   const parts = trim_hash.split("/");
   if (parts.length === 3) {
     const zoom = parseFloat(parts[0]);
-    const center: [number, number] = [
-      parseFloat(parts[1]),
-      parseFloat(parts[2]),
-    ];
+    const center: MapCoords = [parseFloat(parts[1]), parseFloat(parts[2])];
     return [zoom, center];
   } else {
     throw new Error("invalid location hash");
@@ -22,7 +23,7 @@ const locationFromHash = (hash: string): [number, [number, number]] => {
 };
 
 let zoom = 2;
-let center: [number, number] = [-5000000, 0];
+let center: MapCoords = [-5000000, 0];
 
 if (window.location.hash) {
   try {
@@ -58,7 +59,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   });
 };
 
-const extent = [-80000000, -40000000, 60000000, 40000000];
+const extent: Extent = [-80000000, -40000000, 60000000, 40000000];
 
 const view = new View({
   multiWorld: true,
