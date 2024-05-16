@@ -18,9 +18,9 @@ const calculateMandelbrotSet = (
 
   const isInCardioidOrBulb = (x: number, y: number): boolean => {
     let y2 = y * y;
-    let q = Math.pow(x - 0.25, 2) + y2;
+    let q = (x - 0.25) ** 2 + y2;
     let inCardioid = q * (q + (x - 0.25)) < 0.25 * y2;
-    let inBulb = Math.pow(x + 1.0, 2) + y2 < 0.0625;
+    let inBulb = (x + 1.0) ** 2 + y2 < 0.0625;
     return inCardioid || inBulb;
   };
 
@@ -66,7 +66,7 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const scale = Math.pow(2, -z) * 4;
+  const scale = 2 ** -z * 4;
   const offsetX = -2 + x * scale;
   const offsetY = -2 + y * scale;
 

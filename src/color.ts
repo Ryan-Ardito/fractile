@@ -1,6 +1,7 @@
 const PALETTE_SCALE = 64;
 const PALETTE_OFFSET = 0;
 
+type HSL = [number, number, number];
 type RGB = [number, number, number];
 
 export const colorPixel = (escapeIters: number, maxIters: number): RGB => {
@@ -19,6 +20,10 @@ export const colorPixel = (escapeIters: number, maxIters: number): RGB => {
   const lightness =
     normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
 
+  return hslToRgb([hue, saturation, lightness]);
+};
+
+const hslToRgb = ([hue, saturation, lightness]: HSL): RGB => {
   const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
   const m = lightness - c / 2;
