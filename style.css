@@ -1,11 +1,17 @@
 @import "node_modules/ol/ol.css";
 
 html, body {
+  font-family: sans-serif;
+  color: white;
   margin: 0;
   padding: 0;
   height: 100%;
   background-color: black;
   --ol-partial-background-color: rgba(255, 255, 255, 0.2);
+}
+
+a {
+  color: white;
 }
 
 #map {
@@ -17,15 +23,9 @@ html, body {
 }
 
 .about-info {
-  font-family: sans-serif;
   opacity: 60%;
-  color: lightgray;
   position: fixed;
   bottom: 6px;
   right: 8px;
   z-index: 1000;
-}
-
-.github-link {
-  color: white;
 }
