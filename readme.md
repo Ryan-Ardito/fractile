@@ -1,6 +1,8 @@
 # Mandelbrot Viewer
 https://ryan-ardito.github.io/fractile/
+
 ## Controls
+
 ### Desktop
 - **Click-and-drag**: Pan
 - **Scroll wheel**: Zoom in/out
@@ -8,10 +10,12 @@ https://ryan-ardito.github.io/fractile/
 - **F11**: Fullscreen
 - **Double-click**: Zoom in
 - **Shift + double-click**: Zoom out
+
 ### Mobile
 - **Pinch**: Zoom in/out
 - **Drag**: Pan
 - **Double-tap**: Zoom in
+
 ## Features
 - Caching
 - Preloading
