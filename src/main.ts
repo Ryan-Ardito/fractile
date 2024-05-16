@@ -127,6 +127,12 @@ window.addEventListener("hashchange", (ev) => {
     const [zoom, center] = locationFromHash(hash);
     map.getView().setCenter(center);
     map.getView().setZoom(zoom);
+    const state = {
+      zoom: mapView.getZoom(),
+      center: mapView.getCenter(),
+    };
+
+    window.history.replaceState(state, "map", hash);
   } catch {}
 });
 
