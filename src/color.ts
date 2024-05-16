@@ -4,9 +4,7 @@ const PALETTE_OFFSET = 0;
 type HSL = [number, number, number];
 type RGB = [number, number, number];
 
-export const colorPixel = (escapeIters: number, maxIters: number): RGB => {
-  const normalizedIters = escapeIters % maxIters;
-
+export const colorPixel = (normalizedIters: number): RGB => {
   if (normalizedIters === 0) {
     return [0, 0, 0];
   }

@@ -80,7 +80,8 @@ const calculateMandelbrotSet = (
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
         const escapeIters = escapeTime(cx, cy, maxIters);
-        const [red, green, blue] = colorPixel(escapeIters, maxIters);
+        const normalizedIters = escapeIters % maxIters;
+        const [red, green, blue] = colorPixel(normalizedIters);
 
         data[index] = red;
         data[index + 1] = green;

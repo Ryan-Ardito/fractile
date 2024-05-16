@@ -72,6 +72,9 @@ const view = new View({
 });
 
 const layer = new TileLayer({
+  style: {
+    color: ["array", ["band", 1], ["band", 2], ["band", 3], ["band", 4]],
+  },
   extent,
   preload: Infinity,
   source: new DataTile({
