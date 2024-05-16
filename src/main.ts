@@ -3,7 +3,7 @@ import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 
-const SIZE = 256;
+const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
 
 const locationFromHash = (hash: string): [number, [number, number]] => {
@@ -33,7 +33,8 @@ if (window.location.hash) {
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
-      new URL("./mandelbrotWorker.ts", import.meta.url)
+      new URL("./mandelbrotWorker.ts", import.meta.url),
+      { type: "module" }
     );
 
     worker.onmessage = (e) => {
@@ -51,7 +52,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
       z,
       x,
       y,
-      size: SIZE,
+      size: TILE_SIZE,
       iterations: BASE_ITERATIONS * z,
     });
   });
@@ -75,7 +76,7 @@ const layer = new TileLayer({
   source: new DataTile({
     interpolate: true,
     transition: 0,
-    tileSize: SIZE,
+    tileSize: TILE_SIZE,
     loader: loadTile,
   }),
 });
@@ -91,11 +92,13 @@ const map = new Map({
 
 let shouldUpdate = true;
 const mapView = map.getView();
+
 const updatePermalink = () => {
   if (!shouldUpdate) {
     shouldUpdate = true;
     return;
   }
+
   const center = mapView.getCenter();
   const zoom = mapView.getZoom();
   if (!center || !mapView || !zoom) {

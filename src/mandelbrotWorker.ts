@@ -1,3 +1,5 @@
+import { colorPixel } from "./color";
+
 const ALPHA = 255;
 
 const PERIODICITY_THRESHOLD = 1e-12;
@@ -9,7 +11,7 @@ const calculateMandelbrotSet = (
   x: number,
   y: number,
   size: number,
-  iterations: number
+  maxIters: number
 ): Uint8Array => {
   // hacky black real line fix
   z += 1e-9;
@@ -64,64 +66,6 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const PALETTE_SCALE = 64;
-
-  const colorPixel = (normalizedIters: number): number[] => {
-    if (normalizedIters === 0) {
-      return [0, 0, 0];
-    }
-    const hue =
-      ((normalizedIters * 360) / (PALETTE_SCALE * Math.log2(normalizedIters))) %
-      360;
-    const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
-    const saturation = variance * 0.8;
-    const lightness =
-      normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
-
-    const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
-    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-    const m = lightness - c / 2;
-
-    let red = 0,
-      green = 0,
-      blue = 0;
-    if (hue < 60) {
-      red = c;
-      green = x;
-    } else if (hue < 120) {
-      red = x;
-      green = c;
-    } else if (hue < 180) {
-      green = c;
-      blue = x;
-    } else if (hue < 240) {
-      green = x;
-      blue = c;
-    } else if (hue < 300) {
-      red = x;
-      blue = c;
-    } else {
-      red = c;
-      blue = x;
-    }
-
-    red = Math.round((red + m) * 255);
-    green = Math.round((green + m) * 255);
-    blue = Math.round((blue + m) * 255);
-
-    return [red, green, blue];
-  };
-
-  const colorPixelFast = (normalized: number) => {
-    const value =
-      (normalized / (256 + PALETTE_SCALE * Math.log2(normalized))) * 255;
-    const red = (value % 8) * 32;
-    const green = (value % 16) * 16;
-    const blue = (value % 32) * 8;
-
-    return [red, green, blue];
-  };
-
   const scale = Math.pow(2, -z) * 4;
   const offsetX = -2 + x * scale;
   const offsetY = -2 + y * scale;
@@ -135,9 +79,8 @@ const calculateMandelbrotSet = (
 
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
-        const escapeIters = escapeTime(cx, cy, iterations);
-        const normalized = escapeIters % iterations;
-        const [red, green, blue] = colorPixel(normalized);
+        const escapeIters = escapeTime(cx, cy, maxIters);
+        const [red, green, blue] = colorPixel(escapeIters, maxIters);
 
         data[index] = red;
         data[index + 1] = green;
