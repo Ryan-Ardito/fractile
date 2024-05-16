@@ -81,17 +81,18 @@ const calculateMandelbrotSet = (
       if (!isInCardioidOrBulb(cx, cy)) {
         const escapeIters = escapeTime(cx, cy, maxIters);
         const normalizedIters = escapeIters % maxIters;
-        const [red, green, blue] = colorPixel(normalizedIters);
 
-        data[index] = red;
-        data[index + 1] = green;
-        data[index + 2] = blue;
-        data[index + 3] = ALPHA;
+        // Pack normalizedIters into data
+        data[index] = (normalizedIters >> 24) & 0xff; // Most significant byte
+        data[index + 1] = (normalizedIters >> 16) & 0xff; // Second most significant byte
+        data[index + 2] = (normalizedIters >> 8) & 0xff; // Third most significant byte
+        data[index + 3] = normalizedIters & 0xff; // Least significant byte
       } else {
+        // If in cardioid or bulb, set all bytes to 0
         data[index] = 0;
         data[index + 1] = 0;
         data[index + 2] = 0;
-        data[index + 3] = ALPHA;
+        data[index + 3] = 0;
       }
     }
   }
