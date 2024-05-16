@@ -1,6 +1,7 @@
 import { colorPixel } from "./color";
 
 const ALPHA = 255;
+const LN_2 = 0.6931471805599453;
 
 const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
@@ -40,7 +41,7 @@ const calculateMandelbrotSet = (
     while (i < maxIterations) {
       for (let s = 0; s < CYCLE_MEMORY_INTERVAL; s++) {
         if (x2 + y2 > 8) {
-          return i + 2 - Math.log(Math.log(x2 + y2)) / Math.log(2);
+          return i + 2 - Math.log(Math.log(x2 + y2)) / LN_2;
         }
 
         zy = (zx + zx) * zy + cy;
