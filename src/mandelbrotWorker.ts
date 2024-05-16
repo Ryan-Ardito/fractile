@@ -75,7 +75,8 @@ const calculateMandelbrotSet = (
       360;
     const variance = 0.42 + 0.28 * Math.sin(normalizedIters * 0.1);
     const saturation = variance * 0.8;
-    const lightness = normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
+    const lightness =
+      normalizedIters < 24 ? (normalizedIters - 1) / 38 : variance;
 
     const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
     const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
@@ -87,18 +88,21 @@ const calculateMandelbrotSet = (
     if (hue < 60) {
       red = c;
       green = x;
-    } else if (hue < 180) {
+    } else if (hue < 120) {
       red = x;
       green = c;
-    } else if (hue < 240) {
+    } else if (hue < 180) {
       green = c;
       blue = x;
-    } else if (hue < 300) {
+    } else if (hue < 240) {
       green = x;
       blue = c;
-    } else {
+    } else if (hue < 300) {
       red = x;
       blue = c;
+    } else {
+      red = c;
+      blue = x;
     }
 
     red = Math.round((red + m) * 255);
