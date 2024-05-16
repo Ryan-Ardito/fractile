@@ -21,7 +21,7 @@ const locationFromHash = (hash: string): [number, [number, number]] => {
   }
 };
 
-let zoom = 2.5;
+let zoom = 2;
 let center: [number, number] = [-5000000, 0];
 
 if (window.location.hash) {
@@ -62,7 +62,7 @@ const extent = [-80000000, -40000000, 60000000, 40000000];
 const view = new View({
   multiWorld: true,
   extent,
-  minZoom: 1.2,
+  minZoom: 1,
   maxZoom: 42,
   enableRotation: false,
   center,
