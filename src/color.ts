@@ -1,6 +1,7 @@
 const HUE_SCALE = 360;
 const BASE_CONTRAST = 0.42;
 const ITER_FALLOFF = 24;
+const DITHER_STRENGTH = 0.04;
 
 const PALETTE_SCALE = 64;
 const PALETTE_OFFSET = 0;
@@ -20,18 +21,23 @@ export const colorPixel = (normalizedIters: number): RGB => {
     return [0, 0, 0];
   }
 
+  const falloff = (normalizedIters - 1) / ITER_FALLOFF;
+  const dither = (Math.random() - 0.5) * DITHER_STRENGTH;
+  const variance =
+    BASE_CONTRAST +
+    BAND_CONTRAST * Math.sin((normalizedIters + BAND_OFFSET) / BAND_SPACING);
+
   const hue =
     ((normalizedIters * HUE_SCALE) /
       (PALETTE_SCALE * Math.log2(normalizedIters)) +
       PALETTE_OFFSET) %
     360;
-  const variance =
-    BASE_CONTRAST +
-    BAND_CONTRAST * Math.sin((normalizedIters + BAND_OFFSET) / BAND_SPACING);
+
   const saturation = SATURATION * variance;
+
   const lightness =
     normalizedIters < ITER_FALLOFF + 1
-      ? LIGHTNESS * variance * ((normalizedIters - 1) / ITER_FALLOFF)
+      ? (LIGHTNESS * variance + dither) * falloff
       : LIGHTNESS * variance;
 
   return hslToRgb([hue, saturation, lightness]);
