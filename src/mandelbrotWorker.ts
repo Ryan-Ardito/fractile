@@ -3,7 +3,7 @@ import { colorPixel } from "./color";
 const ALPHA = 255;
 const LN_2 = 0.6931471805599453;
 
-const BAILOUT = 8;
+const BAILOUT = 24;
 const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
 const CYCLE_MEMORY_INTERVAL = 20;
