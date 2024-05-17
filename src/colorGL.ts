@@ -1,22 +1,18 @@
 import { ExpressionValue } from "ol/style/webgl";
 
 export const colorPixelExpression = (): ExpressionValue => {
-  const normalizedIters = [
-    "floor",
-    ["+", ["*", ["band", 1], ["^", 2, 24]],
-    ["+", ["*", ["band", 2], ["^", 2, 16]],
-    ["+", ["*", ["band", 3], ["^", 2, 8]],
-    ["band", 4]]]]
-  ];
+  const b1 = ["*", ["band", 1], ["^", 2, 24]];
+  const b2 = ["*", ["band", 2], ["^", 2, 16]];
+  const b3 = ["*", ["band", 3], ["^", 2, 8]];
+  const b4 = ["band", 4];
+  const normalizedIters = ["floor", ["+", b1, ["+", b2, ["+", b3, b4]]]];
+
   const value = ["*", normalizedIters, 255];
-  // const red = ["/", ["*", ["%", value, 8], 32], 255];
-  // const green = ["/", ["*", ["%", value, 16], 16], 255];
-  // const blue = ["/", ["*", ["%", value, 32], 8], 255];
   const red = ["*", ["%", value, 8], 32];
   const green = ["*", ["%", value, 16], 16];
   const blue = ["*", ["%", value, 32], 8];
+
   return ["color", red, green, blue, 1];
-  // return ["array", ["band", 1], ["band", 2], ["band", 3], ["band", 4]];
 };
 
 // const PALETTE_SCALE = 64;
