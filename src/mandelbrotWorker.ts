@@ -1,7 +1,3 @@
-import { colorPixel } from "./color";
-
-const ALPHA = 255;
-
 const PERIODICITY_THRESHOLD = 1e-12;
 const CYCLE_DETECTION_DELAY = 40;
 const CYCLE_MEMORY_INTERVAL = 20;
@@ -82,13 +78,12 @@ const calculateMandelbrotSet = (
         const escapeIters = escapeTime(cx, cy, maxIters);
         const normalizedIters = escapeIters % maxIters;
 
-        // Pack normalizedIters into data
-        data[index] = (normalizedIters >> 24) & 0xff; // Most significant byte
-        data[index + 1] = (normalizedIters >> 16) & 0xff; // Second most significant byte
-        data[index + 2] = (normalizedIters >> 8) & 0xff; // Third most significant byte
-        data[index + 3] = normalizedIters & 0xff; // Least significant byte
+        // pack normalizedIters into Uint8Array
+        data[index] = (normalizedIters >> 24) & 0xff;
+        data[index + 1] = (normalizedIters >> 16) & 0xff;
+        data[index + 2] = (normalizedIters >> 8) & 0xff;
+        data[index + 3] = normalizedIters & 0xff;
       } else {
-        // If in cardioid or bulb, set all bytes to 0
         data[index] = 0;
         data[index + 1] = 0;
         data[index + 2] = 0;

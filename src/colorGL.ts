@@ -1,6 +1,7 @@
 import { ExpressionValue } from "ol/style/webgl";
 
 export const colorPixelExpression = (): ExpressionValue => {
+  // unpack normalizedIters from Uint8Array
   const b1 = ["*", ["band", 1], ["^", 2, 24]];
   const b2 = ["*", ["band", 2], ["^", 2, 16]];
   const b3 = ["*", ["band", 3], ["^", 2, 8]];
