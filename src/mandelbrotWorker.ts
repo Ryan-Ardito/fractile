@@ -81,11 +81,12 @@ const calculateMandelbrotSet = (
         const escapeIters = escapeTime(cx, cy, maxIters);
         const normalizedIters = escapeIters % maxIters;
 
-        // pack normalizedIters into Uint8Array
-        data[index + 0] = (normalizedIters / 2**24) & 0xff;
-        data[index + 1] = (normalizedIters / 2**26) & 0xff;
-        data[index + 2] = (normalizedIters / 2**8) & 0xff;
-        data[index + 3] = (normalizedIters / 2**0) & 0xff;
+        // pack normalizedIters into Uint8Array, big-endian
+        data[index + 0] = (normalizedIters / 2 ** 16) & 0xff;
+        data[index + 1] = (normalizedIters / 2 ** 8) & 0xff;
+        data[index + 2] = normalizedIters & 0xff;
+        // pack fractional part
+        data[index + 3] = (normalizedIters - Math.floor(normalizedIters)) * 255;
       } else {
         data[index + 0] = 0;
         data[index + 1] = 0;
