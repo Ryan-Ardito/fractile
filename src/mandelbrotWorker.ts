@@ -76,13 +76,13 @@ const calculateMandelbrotSet = (
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
         const escapeIters = escapeTime(cx, cy, maxIters);
-        const normalizedIters = escapeIters % maxIters;
+        const normalizedIters = (escapeIters % maxIters) - 1;
 
         // pack normalizedIters into Uint8Array
-        data[index] = (normalizedIters >> 24) & 0xff;
-        data[index + 1] = (normalizedIters >> 16) & 0xff;
-        data[index + 2] = (normalizedIters >> 8) & 0xff;
-        data[index + 3] = normalizedIters & 0xff;
+        data[index + 0] = normalizedIters & 0xff;
+        data[index + 1] = (normalizedIters >> 8) & 0xff;
+        data[index + 2] = (normalizedIters >> 16) & 0xff;
+        data[index + 3] = (normalizedIters >> 24) & 0xff;
       } else {
         data[index] = 0;
         data[index + 1] = 0;

@@ -8,7 +8,7 @@ export const colorPixelExpression = (): ExpressionValue => {
   const b4 = ["band", 4];
   const normalizedIters = ["floor", ["+", b1, ["+", b2, ["+", b3, b4]]]];
 
-  const value = ["*", normalizedIters, 255];
+  const value = ["/", normalizedIters, 2];
   const red = ["*", ["%", value, 8], 32];
   const green = ["*", ["%", value, 16], 16];
   const blue = ["*", ["%", value, 32], 8];
