@@ -1,25 +1,50 @@
 import { ExpressionValue } from "ol/style/webgl";
 
+const HUE_SCALE = 360;
+const BASE_CONTRAST = 0.42;
+const ITER_FALLOFF = 24;
+const DITHER_STRENGTH = 0.04;
+const SMOOTH_COLOR = true;
+
+const PALETTE_SCALE = 64;
+const PALETTE_OFFSET = 0;
+
+const BAND_SPACING = 10;
+const BAND_CONTRAST = 0.28;
+const BAND_OFFSET = 0;
+
+const SATURATION = 0.8;
+const LIGHTNESS = 1;
+
+const unpackUint32 = (): ExpressionValue => {
+  const b1 = ["*", ["*", ["band", 1], ["^", 2, 24]], 255];
+  const b2 = ["*", ["*", ["band", 2], ["^", 2, 16]], 255];
+  const b3 = ["*", ["*", ["band", 3], ["^", 2, 8]], 255];
+  const b4 = ["*", ["*", ["band", 4], ["^", 2, 0]], 255];
+
+  return ["+", b1, ["+", b2, ["+", b3, b4]]];
+};
+
 export const colorPixelExpression = (): ExpressionValue => {
-  // unpack normalizedIters from Uint8Array
-  const b1 = ["*", ["band", 1], ["^", 2, 24]];
-  const b2 = ["*", ["band", 2], ["^", 2, 16]];
-  const b3 = ["*", ["band", 3], ["^", 2, 8]];
-  const b4 = ["band", 4];
-  const normalizedIters = ["+", b1, ["+", b2, ["+", b3, b4]]];
+  const normalizedIters = unpackUint32();
 
-  const adjustedIters = ["/", ["*", normalizedIters, 360], 128];
-  const hue = ["%", adjustedIters, 360];
+  const adjustedIters = normalizedIters;
+  const hue = ["%", adjustedIters, HUE_SCALE];
 
-  const sine = ["sin", ["*", normalizedIters, 0.1]];
-  const sineBand = ["*", 0.24, sine];
-  const variance = ["+", 0.42, sineBand];
+  const sine = [
+    "sin",
+    ["/", ["+", normalizedIters, BAND_OFFSET], BAND_SPACING],
+  ];
+  const sineBand = ["*", BAND_CONTRAST, sine];
+  const variance = ["+", BASE_CONTRAST, sineBand];
 
-  const saturation = ["*", variance, 0.8];
+  const saturation = ["*", variance, SATURATION];
+  // const saturation = 0.5;
 
-  const condition = ["<", normalizedIters, 24];
-  const falloff = ["/", ["-", normalizedIters, 1], 38];
-  const lightness = ["case", condition, falloff, variance];
+  const falloff = ["/", ["-", normalizedIters, 1], ITER_FALLOFF];
+  const condition = ["<", normalizedIters, ["+", ITER_FALLOFF, 1]];
+  const lightness = ["case", condition, ["*", variance, falloff], variance];
+  // const lightness = 0.5;
 
   const blackPixel = ["color", 0, 0, 0, 1];
   return [
