@@ -9,43 +9,89 @@
   </head>
   <body>
     <div id="floatingBox">
-      <label>hueScale: <input type="number" id="hueScale" value="360" /></label>
       <label
-        >baseContrast:
-        <input type="number" step="0.01" id="baseContrast" value="0.42"
+        >hueScale:
+        <input type="range" id="hueScale" min="0" max="360" value="360"
       /></label>
       <label
-        >iterFalloff: <input type="number" id="iterFalloff" value="24"
+        >baseContrast:
+        <input
+          type="range"
+          id="baseContrast"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.42"
+      /></label>
+      <label
+        >iterFalloff:
+        <input type="range" id="iterFalloff" min="0" max="100" value="24"
       /></label>
       <label
         >ditherStrength:
-        <input type="number" step="0.01" id="ditherStrength" value="0.04"
+        <input
+          type="range"
+          id="ditherStrength"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.04"
       /></label>
       <label
-        >smoothColor: <input type="number" id="smoothColor" value="1"
+        >smoothColor:
+        <input
+          type="range"
+          id="smoothColor"
+          min="0"
+          max="1"
+          step="0.01"
+          value="1"
       /></label>
       <label
-        >paletteScale: <input type="number" id="paletteScale" value="64"
+        >paletteScale:
+        <input type="range" id="paletteScale" min="0" max="256" value="64"
       /></label>
       <label
-        >paletteOffset: <input type="number" id="paletteOffset" value="0"
+        >paletteOffset:
+        <input type="range" id="paletteOffset" min="0" max="100" value="0"
       /></label>
       <label
-        >bandSpacing: <input type="number" id="bandSpacing" value="10"
+        >bandSpacing:
+        <input type="range" id="bandSpacing" min="0" max="100" value="10"
       /></label>
       <label
         >bandContrast:
-        <input type="number" step="0.01" id="bandContrast" value="0.28"
+        <input
+          type="range"
+          id="bandContrast"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.28"
       /></label>
       <label
-        >bandOffset: <input type="number" id="bandOffset" value="0"
+        >bandOffset:
+        <input type="range" id="bandOffset" min="0" max="100" value="0"
       /></label>
       <label
         >saturation:
-        <input type="number" step="0.01" id="saturation" value="0.8"
+        <input
+          type="range"
+          id="saturation"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.8"
       /></label>
       <label
-        >lightness: <input type="number" step="0.01" id="lightness" value="1"
+        >lightness:
+        <input
+          type="range"
+          id="lightness"
+          min="0"
+          max="1"
+          step="0.01"
+          value="1"
       /></label>
     </div>
     <div id="map" class="map"></div>
