@@ -199,3 +199,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 });
+
+const openButton = document.getElementById("openButton");
+const floatingBox = document.getElementById("floatingBox");
+
+if (openButton && floatingBox) {
+  openButton.addEventListener("click", () => {
+    switch (floatingBox.style.visibility) {
+      case "visible":
+        floatingBox.style.visibility = "collapse";
+        floatingBox.style.opacity = "0%";
+        break;
+      default:
+        floatingBox.style.visibility = "visible";
+        floatingBox.style.opacity = "60%";
+    }
+  });
+} else {
+  console.error("Color menu not found.");
+}

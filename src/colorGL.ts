@@ -67,10 +67,7 @@ export const colorPixelExpression = (): ExpressionValue => {
     HUE_SCALE,
   ];
 
-  const sine = [
-    "sin",
-    ["/", ["+", adjustedIters, BAND_OFFSET], BAND_SPACING],
-  ];
+  const sine = ["sin", ["/", ["+", adjustedIters, BAND_OFFSET], BAND_SPACING]];
   const sineBand = ["*", BAND_CONTRAST, sine];
   const variance = ["+", BASE_CONTRAST, sineBand];
 
@@ -78,7 +75,12 @@ export const colorPixelExpression = (): ExpressionValue => {
 
   const falloff = ["/", ["-", adjustedIters, 1], ITER_FALLOFF];
   const condition = ["<", adjustedIters, ["+", ITER_FALLOFF, 1]];
-  const lightness = ["case", condition, ["*", variance, falloff], variance];
+  const lightness = [
+    "case",
+    condition,
+    ["*", ["*", LIGHTNESS, variance], falloff],
+    ["*", LIGHTNESS, variance],
+  ];
 
   const blackPixel = ["color", 0, 0, 0, 1];
   return [

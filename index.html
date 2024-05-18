@@ -8,13 +8,47 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <button id="openButton">Color menu</button>
     <div id="floatingBox">
       <label
-        >hueScale:
-        <input type="range" id="hueScale" min="0" max="360" value="360"
+        >Hue:
+        <output>0</output>
+        <input
+          type="range"
+          id="paletteOffset"
+          min="0"
+          max="360"
+          value="0"
+          oninput="this.previousElementSibling.value = this.value"
+        />
+      </label>
+      <label
+        >Saturation:
+        <output>0.8</output>
+        <input
+          type="range"
+          id="saturation"
+          min="0"
+          max="2"
+          step="0.01"
+          value="0.8"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >baseContrast:
+        >Lightness:
+        <output>1</output>
+        <input
+          type="range"
+          id="lightness"
+          min="0"
+          max="2"
+          step="0.01"
+          value="1"
+          oninput="this.previousElementSibling.value = this.value"
+      /></label>
+      <label
+        >Contrast:
+        <output>0.42</output>
         <input
           type="range"
           id="baseContrast"
@@ -22,66 +56,54 @@
           max="1"
           step="0.01"
           value="0.42"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >iterFalloff:
-        <input type="range" id="iterFalloff" min="0" max="100" value="24"
-      /></label>
-      <label
-        >ditherStrength:
+        >Palette scale:
+        <output>1</output>
         <input
           type="range"
-          id="ditherStrength"
-          min="0"
-          max="1"
+          id="paletteScale"
+          min="0.01"
+          max="8.0"
           step="0.01"
-          value="0.04"
+          value="1"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >paletteScale:
-        <input type="range" id="paletteScale" min="0.0" max="2.0" step="0.01" value="1"
+        >Band spacing:
+        <output>10</output>
+        <input
+          type="range"
+          id="bandSpacing"
+          min="0.1"
+          max="60"
+          step="0.1"
+          value="10"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >paletteOffset:
-        <input type="range" id="paletteOffset" min="0" max="360" value="0"
+        >Band offset:
+        <output>0</output>
+        <input
+          type="range"
+          id="bandOffset"
+          min="0"
+          max="360"
+          value="0"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >bandSpacing:
-        <input type="range" id="bandSpacing" min="0" max="100" value="10"
-      /></label>
-      <label
-        >bandContrast:
+        >Band contrast:
+        <output>0.28</output>
         <input
           type="range"
           id="bandContrast"
           min="0"
-          max="1"
+          max="0.5"
           step="0.01"
           value="0.28"
-      /></label>
-      <label
-        >bandOffset:
-        <input type="range" id="bandOffset" min="0" max="100" value="0"
-      /></label>
-      <label
-        >saturation:
-        <input
-          type="range"
-          id="saturation"
-          min="0"
-          max="1"
-          step="0.01"
-          value="0.8"
-      /></label>
-      <label
-        >lightness:
-        <input
-          type="range"
-          id="lightness"
-          min="0"
-          max="1"
-          step="0.01"
-          value="1"
+          oninput="this.previousElementSibling.value = this.value"
       /></label>
     </div>
     <div id="map" class="map"></div>
