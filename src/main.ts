@@ -212,7 +212,7 @@ if (openButton && floatingBox) {
         break;
       default:
         floatingBox.style.visibility = "visible";
-        floatingBox.style.opacity = "60%";
+        floatingBox.style.opacity = "100%";
     }
   });
 } else {
