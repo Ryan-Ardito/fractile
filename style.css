@@ -29,3 +29,20 @@ a {
   right: 8px;
   z-index: 1000;
 }
+
+#floatingBox {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 20px;
+  background: #303030;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  z-index: 1000;
+}
+
+#floatingBox label {
+  display: block;
+  margin-top: 10px;
+}

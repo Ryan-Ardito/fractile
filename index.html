@@ -1,13 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fractile</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="stylesheet" href="./style.css">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <div id="floatingBox">
+      <label>hueScale: <input type="number" id="hueScale" value="360" /></label>
+      <label
+        >baseContrast:
+        <input type="number" step="0.01" id="baseContrast" value="0.42"
+      /></label>
+      <label
+        >iterFalloff: <input type="number" id="iterFalloff" value="24"
+      /></label>
+      <label
+        >ditherStrength:
+        <input type="number" step="0.01" id="ditherStrength" value="0.04"
+      /></label>
+      <label
+        >smoothColor: <input type="number" id="smoothColor" value="1"
+      /></label>
+      <label
+        >paletteScale: <input type="number" id="paletteScale" value="64"
+      /></label>
+      <label
+        >paletteOffset: <input type="number" id="paletteOffset" value="0"
+      /></label>
+      <label
+        >bandSpacing: <input type="number" id="bandSpacing" value="10"
+      /></label>
+      <label
+        >bandContrast:
+        <input type="number" step="0.01" id="bandContrast" value="0.28"
+      /></label>
+      <label
+        >bandOffset: <input type="number" id="bandOffset" value="0"
+      /></label>
+      <label
+        >saturation:
+        <input type="number" step="0.01" id="saturation" value="0.8"
+      /></label>
+      <label
+        >lightness: <input type="number" step="0.01" id="lightness" value="1"
+      /></label>
+    </div>
     <div id="map" class="map"></div>
     <div class="about-info">
       <span>ryan ardito</span>

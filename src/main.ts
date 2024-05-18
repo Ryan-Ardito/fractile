@@ -185,3 +185,17 @@ document.onmousedown = () => {
   showMouseCursor();
   timeout = setTimeout(hideMouseCursor, wakeTime);
 };
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inputs: NodeListOf<HTMLInputElement> =
+    document.querySelectorAll("#floatingBox input");
+
+  inputs.forEach((input) => {
+    input.addEventListener("input", (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const id: string = target.id;
+      const value: number = parseFloat(target.value);
+      layer.updateStyleVariables({ [id]: value });
+    });
+  });
+});
