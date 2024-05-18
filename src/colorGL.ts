@@ -31,7 +31,7 @@ export const colorPixelExpression = (): ExpressionValue => {
   const normalizedIters = unpackFloat();
 
   const adjustedIters = normalizedIters;
-  const hue = ["%", adjustedIters, HUE_SCALE];
+  const hue = ["%", ["+", adjustedIters, PALETTE_OFFSET], HUE_SCALE];
 
   const sine = [
     "sin",
