@@ -23,8 +23,8 @@ const locationFromHash = (hash: string): ZoomCoords => {
   }
 };
 
-let zoom = 2;
-let center: MapCoords = [-5000000, 0];
+let zoom = 3;
+let center: MapCoords = [-2500000, 0];
 
 if (window.location.hash) {
   try {
@@ -65,7 +65,7 @@ const extent: Extent = [-80000000, -40000000, 60000000, 40000000];
 const view = new View({
   multiWorld: true,
   extent,
-  minZoom: 1,
+  minZoom: 2,
   maxZoom: 42,
   enableRotation: false,
   center,
@@ -128,6 +128,12 @@ window.addEventListener("hashchange", (ev) => {
     const [zoom, center] = locationFromHash(hash);
     map.getView().setCenter(center);
     map.getView().setZoom(zoom);
+    const state = {
+      zoom: mapView.getZoom(),
+      center: mapView.getCenter(),
+    };
+
+    window.history.replaceState(state, "map", hash);
   } catch {}
 });
 
