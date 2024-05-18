@@ -1,6 +1,3 @@
-import { colorPixel } from "./color";
-
-const ALPHA = 255;
 const LN_2 = 0.6931471805599453;
 
 const BAILOUT = 24;
@@ -83,17 +80,18 @@ const calculateMandelbrotSet = (
       if (!isInCardioidOrBulb(cx, cy)) {
         const escapeIters = escapeTime(cx, cy, maxIters);
         const normalizedIters = escapeIters % maxIters;
-        const [red, green, blue] = colorPixel(normalizedIters);
 
-        data[index] = red;
-        data[index + 1] = green;
-        data[index + 2] = blue;
-        data[index + 3] = ALPHA;
+        // pack normalizedIters into Uint8Array, big-endian
+        data[index + 0] = (normalizedIters / 2 ** 16) & 0xff;
+        data[index + 1] = (normalizedIters / 2 ** 8) & 0xff;
+        data[index + 2] = normalizedIters & 0xff;
+        // pack fractional part
+        data[index + 3] = (normalizedIters - Math.floor(normalizedIters)) * 255;
       } else {
-        data[index] = 0;
+        data[index + 0] = 0;
         data[index + 1] = 0;
         data[index + 2] = 0;
-        data[index + 3] = ALPHA;
+        data[index + 3] = 0;
       }
     }
   }

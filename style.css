@@ -1,7 +1,9 @@
 @import "node_modules/ol/ol.css";
 
-html, body {
-  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+html,
+body {
+  font-family: "Lucida Sans", "Lucida Sans Regular", "Lucida Grande",
+    "Lucida Sans Unicode", Geneva, Verdana, sans-serif;
   color: white;
   margin: 0;
   padding: 0;
@@ -12,6 +14,10 @@ html, body {
 
 a {
   color: white;
+}
+
+input {
+  width: 100%;
 }
 
 #map {
@@ -28,4 +34,50 @@ a {
   bottom: 6px;
   right: 8px;
   z-index: 1000;
+}
+
+#floatingBox {
+  /* position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 20px;
+  background: #303030;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  z-index: 1000; */
+  /* display: none; */
+  visibility: collapse;
+  opacity: 0%;
+  user-select: none;
+  position: fixed;
+  bottom: 60px;
+  left: 12px;
+  width: 300px;
+  /* height: 200px; */
+  background: #303030;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+  padding: 20px;
+  transition: all 0.2s;
+  z-index: 2000;
+}
+
+#floatingBox label {
+  display: block;
+  margin-top: 10px;
+}
+
+#openButton {
+  position: fixed;
+  height: 2rem;
+  opacity: 20%;
+  bottom: 16px;
+  left: 12px;
+  color: white;
+  background: #303030;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  z-index: 1;
 }

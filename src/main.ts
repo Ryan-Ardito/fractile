@@ -3,6 +3,7 @@ import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 import { Extent } from "ol/extent";
+import { colorPixelExpression } from "./colorGL";
 
 type MapCoords = [number, number];
 type ZoomCoords = [number, MapCoords];
@@ -73,12 +74,26 @@ const view = new View({
 
 const layer = new TileLayer({
   style: {
-    color: ["array", ["band", 1], ["band", 2], ["band", 3], ["band", 4]],
+    color: colorPixelExpression(),
+    variables: {
+      hueScale: 360,
+      baseContrast: 0.42,
+      iterFalloff: 24,
+      ditherStrength: 0.04,
+      smoothColor: 1,
+      paletteScale: 1,
+      paletteOffset: 0,
+      bandSpacing: 10,
+      bandContrast: 0.28,
+      bandOffset: 0,
+      saturation: 0.8,
+      lightness: 1,
+    },
   },
   extent,
   preload: Infinity,
   source: new DataTile({
-    interpolate: true,
+    // interpolate: true,
     transition: 0,
     tileSize: TILE_SIZE,
     loader: loadTile,
@@ -170,3 +185,36 @@ document.onmousedown = () => {
   showMouseCursor();
   timeout = setTimeout(hideMouseCursor, wakeTime);
 };
+
+document.addEventListener("DOMContentLoaded", () => {
+  const inputs: NodeListOf<HTMLInputElement> =
+    document.querySelectorAll("#floatingBox input");
+
+  inputs.forEach((input) => {
+    input.addEventListener("input", (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const id: string = target.id;
+      const value: number = parseFloat(target.value);
+      layer.updateStyleVariables({ [id]: value });
+    });
+  });
+});
+
+const openButton = document.getElementById("openButton");
+const floatingBox = document.getElementById("floatingBox");
+
+if (openButton && floatingBox) {
+  openButton.addEventListener("click", () => {
+    switch (floatingBox.style.visibility) {
+      case "visible":
+        floatingBox.style.visibility = "collapse";
+        floatingBox.style.opacity = "0%";
+        break;
+      default:
+        floatingBox.style.visibility = "visible";
+        floatingBox.style.opacity = "60%";
+    }
+  });
+} else {
+  console.error("Color menu not found.");
+}
