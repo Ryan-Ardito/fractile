@@ -1,20 +1,20 @@
 import { ExpressionValue } from "ol/style/webgl";
 
-// const HUE_SCALE = 360;
-const BASE_CONTRAST = 0.42;
-const ITER_FALLOFF = 24;
-const DITHER_STRENGTH = 0.04;
-const SMOOTH_COLOR = true;
+const HUE_SCALE = ["var", "hueScale"];
+const BASE_CONTRAST = ["var", "baseContrast"];
+const ITER_FALLOFF = ["var", "iterFalloff"];
+const DITHER_STRENGTH = ["var", "ditherStrength"];
+const SMOOTH_COLOR = ["var", "smoothColor"];
 
-const PALETTE_SCALE = 64;
-const PALETTE_OFFSET = 0;
+const PALETTE_SCALE = ["var", "paletteScale"];
+const PALETTE_OFFSET = ["var", "paletteOffset"];
 
-const BAND_SPACING = 10;
-const BAND_CONTRAST = 0.28;
-const BAND_OFFSET = 0;
+const BAND_SPACING = ["var", "bandSpacing"];
+const BAND_CONTRAST = ["var", "bandContrast"];
+const BAND_OFFSET = ["var", "bandOffset"];
 
-const SATURATION = 0.8;
-const LIGHTNESS = 1;
+const SATURATION = ["var", "saturation"];
+const LIGHTNESS = ["var", "lightness"];
 
 const unpackFloat = (): ExpressionValue => {
   // unpack normalizedIters from Uint8Array, big-endian
@@ -31,7 +31,7 @@ export const colorPixelExpression = (): ExpressionValue => {
   const normalizedIters = unpackFloat();
 
   const adjustedIters = normalizedIters;
-  const hue = ["%", adjustedIters, ["var", "hueScale"]];
+  const hue = ["%", adjustedIters, HUE_SCALE];
 
   const sine = [
     "sin",

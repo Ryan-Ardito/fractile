@@ -75,7 +75,20 @@ const view = new View({
 const layer = new TileLayer({
   style: {
     color: colorPixelExpression(),
-    variables: { hueScale: 360 },
+    variables: {
+      hueScale: 360,
+      baseContrast: 0.42,
+      iterFalloff: 24,
+      ditherStrength: 0.04,
+      smoothColor: 1,
+      paletteScale: 64,
+      paletteOffset: 0,
+      bandSpacing: 10,
+      bandContrast: 0.28,
+      bandOffset: 0,
+      saturation: 0.8,
+      lightness: 1,
+    },
   },
   extent,
   preload: Infinity,
