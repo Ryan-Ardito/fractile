@@ -27,29 +27,63 @@ const unpackFloat = (): ExpressionValue => {
   return ["+", b1, ["+", b2, ["+", b3, b4]]];
 };
 
+// const logBase2 = (num: ExpressionValue): ExpressionValue => {
+//   return ["case",
+//     ["<", num, 1], 0,
+//     ["<", num, 2], 1,
+//     ["<", num, 4], 2,
+//     ["<", num, 8], 3,
+//     ["<", num, 16], 4,
+//     ["<", num, 32], 5,
+//     ["<", num, 64], 6,
+//     ["<", num, 128], 7,
+//     ["<", num, 256], 8,
+//     ["<", num, 512], 9,
+//     ["<", num, 1024], 10,
+//     ["<", num, 2048], 11,
+//     ["<", num, 4096], 12,
+//     ["<", num, 8192], 13,
+//     ["<", num, 16384], 14,
+//     ["<", num, 32768], 15,
+//     ["<", num, 65536], 16,
+//     ["<", num, 131072], 17,
+//     ["<", num, 262144], 18,
+//     ["<", num, 524288], 19,
+//     ["<", num, 1048576], 20,
+//     ["<", num, 2097152], 21,
+//     ["<", num, 4194304], 22,
+//     ["<", num, 8388608], 23,
+//     24,
+//   ];
+// }
+
 export const colorPixelExpression = (): ExpressionValue => {
   const normalizedIters = unpackFloat();
 
   const adjustedIters = normalizedIters;
-  const hue = ["%", ["+", adjustedIters, PALETTE_OFFSET], HUE_SCALE];
+  const hue = [
+    "%",
+    ["+", ["/", adjustedIters, PALETTE_SCALE], PALETTE_OFFSET],
+    HUE_SCALE,
+  ];
 
   const sine = [
     "sin",
-    ["/", ["+", normalizedIters, BAND_OFFSET], BAND_SPACING],
+    ["/", ["+", adjustedIters, BAND_OFFSET], BAND_SPACING],
   ];
   const sineBand = ["*", BAND_CONTRAST, sine];
   const variance = ["+", BASE_CONTRAST, sineBand];
 
   const saturation = ["*", variance, SATURATION];
 
-  const falloff = ["/", ["-", normalizedIters, 1], ITER_FALLOFF];
-  const condition = ["<", normalizedIters, ["+", ITER_FALLOFF, 1]];
+  const falloff = ["/", ["-", adjustedIters, 1], ITER_FALLOFF];
+  const condition = ["<", adjustedIters, ["+", ITER_FALLOFF, 1]];
   const lightness = ["case", condition, ["*", variance, falloff], variance];
 
   const blackPixel = ["color", 0, 0, 0, 1];
   return [
     "case",
-    ["==", normalizedIters, 0],
+    ["==", adjustedIters, 0],
     blackPixel,
     hslToRgb(hue, saturation, lightness),
   ];
@@ -63,7 +97,7 @@ const hslToRgb = (
   const adjLightness = ["-", 1, ["abs", ["-", ["*", 2, lightness], 1]]];
   const c = ["*", adjLightness, saturation];
 
-  const adjHue = ["-", 1, ["abs", ["-", ["%", ["/", hue, 40], 2], 1]]];
+  const adjHue = ["-", 1, ["abs", ["-", ["%", ["/", hue, 60], 2], 1]]];
   const x = ["*", c, adjHue];
 
   const m = ["-", lightness, ["/", c, 2]];

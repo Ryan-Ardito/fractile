@@ -81,7 +81,7 @@ const layer = new TileLayer({
       iterFalloff: 24,
       ditherStrength: 0.04,
       smoothColor: 1,
-      paletteScale: 64,
+      paletteScale: 1,
       paletteOffset: 0,
       bandSpacing: 10,
       bandContrast: 0.28,
