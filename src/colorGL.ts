@@ -27,36 +27,6 @@ const unpackFloat = (): ExpressionValue => {
   return ["+", b1, ["+", b2, ["+", b3, b4]]];
 };
 
-// const logBase2 = (num: ExpressionValue): ExpressionValue => {
-//   return ["case",
-//     ["<", num, 1], 0,
-//     ["<", num, 2], 1,
-//     ["<", num, 4], 2,
-//     ["<", num, 8], 3,
-//     ["<", num, 16], 4,
-//     ["<", num, 32], 5,
-//     ["<", num, 64], 6,
-//     ["<", num, 128], 7,
-//     ["<", num, 256], 8,
-//     ["<", num, 512], 9,
-//     ["<", num, 1024], 10,
-//     ["<", num, 2048], 11,
-//     ["<", num, 4096], 12,
-//     ["<", num, 8192], 13,
-//     ["<", num, 16384], 14,
-//     ["<", num, 32768], 15,
-//     ["<", num, 65536], 16,
-//     ["<", num, 131072], 17,
-//     ["<", num, 262144], 18,
-//     ["<", num, 524288], 19,
-//     ["<", num, 1048576], 20,
-//     ["<", num, 2097152], 21,
-//     ["<", num, 4194304], 22,
-//     ["<", num, 8388608], 23,
-//     24,
-//   ];
-// }
-
 export const colorPixelExpression = (): ExpressionValue => {
   const normalizedIters = unpackFloat();
 
