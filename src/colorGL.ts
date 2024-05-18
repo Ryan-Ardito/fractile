@@ -1,6 +1,6 @@
 import { ExpressionValue } from "ol/style/webgl";
 
-const HUE_SCALE = 360;
+// const HUE_SCALE = 360;
 const BASE_CONTRAST = 0.42;
 const ITER_FALLOFF = 24;
 const DITHER_STRENGTH = 0.04;
@@ -16,7 +16,7 @@ const BAND_OFFSET = 0;
 const SATURATION = 0.8;
 const LIGHTNESS = 1;
 
-const unpackUint32 = (): ExpressionValue => {
+const unpackFloat = (): ExpressionValue => {
   // unpack normalizedIters from Uint8Array, big-endian
   const b1 = ["*", ["*", ["band", 1], ["^", 2, 16]], 255];
   const b2 = ["*", ["*", ["band", 2], ["^", 2, 8]], 255];
@@ -28,10 +28,10 @@ const unpackUint32 = (): ExpressionValue => {
 };
 
 export const colorPixelExpression = (): ExpressionValue => {
-  const normalizedIters = unpackUint32();
+  const normalizedIters = unpackFloat();
 
   const adjustedIters = normalizedIters;
-  const hue = ["%", adjustedIters, HUE_SCALE];
+  const hue = ["%", adjustedIters, ["var", "hueScale"]];
 
   const sine = [
     "sin",
