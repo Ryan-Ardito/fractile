@@ -49,9 +49,10 @@ input {
   /* display: none; */
   visibility: collapse;
   opacity: 0%;
+  user-select: none;
   position: fixed;
   bottom: 60px;
-  left: 20px;
+  left: 12px;
   width: 300px;
   /* height: 200px; */
   background: #303030;
@@ -72,8 +73,8 @@ input {
   position: fixed;
   height: 2rem;
   opacity: 20%;
-  bottom: 20px;
-  left: 20px;
+  bottom: 16px;
+  left: 12px;
   color: white;
   background: #303030;
   border: 1px solid #ccc;
