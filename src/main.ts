@@ -163,14 +163,14 @@ window.addEventListener("hashchange", (ev) => {
   } catch {}
 });
 
-window.addEventListener("popstate", (event) => {
+window.onpopstate = (event) => {
   if (event.state === null) {
     return;
   }
   map.getView().setCenter(event.state.center);
   map.getView().setZoom(event.state.zoom);
   shouldUpdate = false;
-});
+};
 
 const wakeTime = 1000;
 let timeout: number;
@@ -203,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("#floatingBox input");
 
   inputs.forEach((input) => {
-    input.addEventListener("input", (e: Event) => {
+    input.oninput = (e: Event) => {
       const target = e.target as HTMLInputElement;
       if (animateButton) {
         if (target.id === "paletteOffset" || target.id === "bandOffset") {
@@ -214,7 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const id: string = target.id;
       const value: number = parseFloat(target.value);
       layer.updateStyleVariables({ [id]: value });
-    });
+    };
   });
 });
 
@@ -222,7 +222,7 @@ const openButton = document.getElementById("openButton");
 const floatingBox = document.getElementById("floatingBox");
 
 if (openButton && floatingBox) {
-  openButton.addEventListener("click", () => {
+  openButton.onclick = () => {
     switch (floatingBox.style.visibility) {
       case "visible":
         floatingBox.style.visibility = "collapse";
@@ -234,7 +234,7 @@ if (openButton && floatingBox) {
         floatingBox.style.opacity = "100%";
         openButton.textContent = "close";
     }
-  });
+  };
 } else {
   console.error("Color menu not found.");
 }
