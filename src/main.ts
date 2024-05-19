@@ -205,10 +205,12 @@ if (openButton && floatingBox) {
       case "visible":
         floatingBox.style.visibility = "collapse";
         floatingBox.style.opacity = "0%";
+        openButton.textContent = "menu";
         break;
       default:
         floatingBox.style.visibility = "visible";
         floatingBox.style.opacity = "100%";
+        openButton.textContent = "close";
     }
   });
 } else {
