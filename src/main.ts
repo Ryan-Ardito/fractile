@@ -154,7 +154,6 @@ const updatePermalink = () => {
 };
 
 let animateColor = false;
-const frameInterval = 1000 / 60;
 let bandOffset = 0;
 let hue = 0;
 
@@ -174,9 +173,7 @@ const animateHue: FrameRequestCallback = (e) => {
     hue -= 1;
   }
   if (animateColor) {
-    setTimeout(() => {
-      requestAnimationFrame(animateHue);
-    }, frameInterval);
+    requestAnimationFrame(animateHue);
   }
 };
 
