@@ -209,6 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (target.id === "paletteOffset" || target.id === "bandOffset") {
           animateColor = false;
           animateButton.textContent = "animate";
+          return;
         }
       }
       const id: string = target.id;
