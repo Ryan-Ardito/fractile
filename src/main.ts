@@ -108,6 +108,27 @@ const map = new Map({
   view,
 });
 
+const startAnimation = () => {
+  if (animateColor) {
+    return;
+  }
+
+  animateColor = true;
+  requestAnimationFrame(animateHue);
+  const animateButton = document.getElementById("animateButton");
+  if (animateButton) {
+    animateButton.textContent = "stop";
+  }
+};
+
+const stopAnimation = () => {
+  animateColor = false;
+  const animateButton = document.getElementById("animateButton");
+  if (animateButton) {
+    animateButton.textContent = "animate";
+  }
+};
+
 let shouldUpdate = true;
 const mapView = map.getView();
 
@@ -216,18 +237,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", function (event) {
     if (event.key === " ") {
       event.preventDefault();
-      if (animateColor) {
-        const animateButton = document.getElementById("animateButton");
-        animateColor = false;
-        if (animateButton) {
-          animateButton.textContent = "animate";
-        }
+      if (!animateColor) {
+        startAnimation();
       } else {
-        animateColor = true;
-        if (animateButton) {
-          animateButton.textContent = "stop";
-        }
-        requestAnimationFrame(animateHue);
+        stopAnimation();
       }
     }
     if (event.key === "Escape" || event.key === "Esc") {
@@ -285,14 +298,12 @@ if (openButton && floatingBox) {
 
 const animateButton = document.getElementById("animateButton");
 if (animateButton) {
-  animateButton.onclick = () => {
-    if (animateColor) {
-      animateColor = false;
-      animateButton.textContent = "animate";
+  animateButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!animateColor) {
+      startAnimation();
     } else {
-      animateColor = true;
-      animateButton.textContent = "stop";
-      requestAnimationFrame(animateHue);
+      stopAnimation();
     }
-  };
+  });
 }
