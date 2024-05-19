@@ -129,6 +129,22 @@ const updatePermalink = () => {
   window.history.replaceState(state, "map", hash);
 };
 
+let animateColor = false;
+const frameInterval = 1000 / 60;
+let bandOffset = 0;
+let hue = 0;
+const animateHue: FrameRequestCallback = (e) => {
+  layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
+  bandOffset = (bandOffset + 0.5) % Number.MAX_SAFE_INTEGER;
+  layer.updateStyleVariables({ ["paletteOffset"]: hue });
+  hue = (hue - 1) % 360;
+  if (animateColor) {
+    setTimeout(() => {
+      requestAnimationFrame(animateHue);
+    }, frameInterval);
+  }
+};
+
 map.on("moveend", updatePermalink);
 
 window.addEventListener("hashchange", (ev) => {
@@ -189,6 +205,12 @@ document.addEventListener("DOMContentLoaded", () => {
   inputs.forEach((input) => {
     input.addEventListener("input", (e: Event) => {
       const target = e.target as HTMLInputElement;
+      if (animateButton) {
+        if (target.id === "paletteOffset" || target.id === "bandOffset") {
+          animateColor = false;
+          animateButton.textContent = "animate";
+        }
+      }
       const id: string = target.id;
       const value: number = parseFloat(target.value);
       layer.updateStyleVariables({ [id]: value });
@@ -215,4 +237,20 @@ if (openButton && floatingBox) {
   });
 } else {
   console.error("Color menu not found.");
+}
+
+const animateButton = document.getElementById("animateButton");
+if (animateButton) {
+  animateButton.addEventListener("click", () => {
+    switch (animateColor) {
+      case false:
+        animateColor = true;
+        animateButton.textContent = "stop";
+        requestAnimationFrame(animateHue);
+        break;
+      default:
+        animateColor = false;
+        animateButton.textContent = "animate";
+    }
+  });
 }

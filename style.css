@@ -76,3 +76,16 @@ input {
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   z-index: 1;
 }
+
+#animateButton {
+  position: fixed;
+  height: 1.8rem;
+  right: 8px;
+  top: 10px;
+  width: 4rem;
+  border-radius: 6px;
+  color: white;
+  background: #303030;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
