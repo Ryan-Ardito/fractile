@@ -4,9 +4,9 @@ import TileLayer from "ol/layer/WebGLTile";
 import View from "ol/View";
 import { Extent } from "ol/extent";
 import { colorPixelExpression } from "./colorGL";
+import { Coordinate } from "ol/coordinate";
 
-type MapCoords = [number, number];
-type ZoomCoords = [number, MapCoords];
+type ZoomCoords = [number, Coordinate];
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
@@ -16,7 +16,7 @@ const locationFromHash = (hash: string): ZoomCoords => {
   const parts = trim_hash.split("/");
   if (parts.length === 3) {
     const zoom = parseFloat(parts[0]);
-    const center: MapCoords = [parseFloat(parts[1]), parseFloat(parts[2])];
+    const center: Coordinate = [parseFloat(parts[1]), parseFloat(parts[2])];
     return [zoom, center];
   } else {
     throw new Error("invalid location hash");
@@ -24,7 +24,7 @@ const locationFromHash = (hash: string): ZoomCoords => {
 };
 
 let zoom = 3;
-let center: MapCoords = [-2500000, 0];
+let center: Coordinate = [-2500000, 0];
 
 if (window.location.hash) {
   try {
