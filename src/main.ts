@@ -136,11 +136,22 @@ let animateColor = false;
 const frameInterval = 1000 / 60;
 let bandOffset = 0;
 let hue = 0;
+
 const animateHue: FrameRequestCallback = (e) => {
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
   bandOffset = (bandOffset + 0.5) % Number.MAX_SAFE_INTEGER;
   layer.updateStyleVariables({ ["hueOffset"]: hue });
-  hue = (hue - 1) % 360;
+  const hueLabel = document.getElementById("hueOffset")?.previousElementSibling;
+  const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
+  if (hueInput && hueLabel) {
+    hueInput.value = hue.toString();
+    hueLabel.textContent = hue.toString();
+  }
+  if (hue < -179) {
+    hue = 179;
+  } else {
+    hue -= 1;
+  }
   if (animateColor) {
     setTimeout(() => {
       requestAnimationFrame(animateHue);
@@ -206,8 +217,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("#floatingBox input");
 
   inputs.forEach((input) => {
-    input.oninput = (e: Event) => {
+    input.addEventListener("input", (e: Event) => {
       const target = e.target as HTMLInputElement;
+      if (target.id === "hueOffset") {
+        hue = parseInt(target.value);
+      }
       if (animateButton) {
         if (target.id === "hueOffset" || target.id === "bandOffset") {
           animateColor = false;
@@ -217,7 +231,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const id: string = target.id;
       const value: number = parseFloat(target.value);
       layer.updateStyleVariables({ [id]: value });
-    };
+    });
   });
 });
 
