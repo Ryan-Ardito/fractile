@@ -214,6 +214,22 @@ document.onmousedown = () => {
 
 document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", function (event) {
+    if (event.key === " ") {
+      event.preventDefault();
+      if (animateColor) {
+        const animateButton = document.getElementById("animateButton");
+        animateColor = false;
+        if (animateButton) {
+          animateButton.textContent = "animate";
+        }
+      } else {
+        animateColor = true;
+        if (animateButton) {
+          animateButton.textContent = "stop";
+        }
+        requestAnimationFrame(animateHue);
+      }
+    }
     if (event.key === "Escape" || event.key === "Esc") {
       const openButton = document.getElementById("openButton");
       const floatingBox = document.getElementById("floatingBox");
