@@ -37,25 +37,13 @@ input {
 }
 
 #floatingBox {
-  /* position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 20px;
-  background: #303030;
-  border: 1px solid #ccc;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  border-radius: 10px;
-  z-index: 1000; */
-  /* display: none; */
   visibility: collapse;
   backdrop-filter: blur(6px);
   user-select: none;
   position: fixed;
-  bottom: 60px;
+  bottom: 54px;
   left: 12px;
   width: 300px;
-  /* height: 200px; */
-  /* background: #303030; */
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid #ccc;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -80,7 +68,7 @@ input {
   width: 3rem;
   opacity: 40%;
   border-radius: 6px;
-  bottom: 16px;
+  bottom: 12px;
   left: 12px;
   color: white;
   background: #303030;
