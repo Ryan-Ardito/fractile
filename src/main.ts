@@ -76,11 +76,7 @@ const layer = new TileLayer({
   style: {
     color: colorPixelExpression(),
     variables: {
-      hueScale: 360,
-      baseContrast: 0.42,
       iterFalloff: 24,
-      ditherStrength: 0.04,
-      smoothColor: 1,
       paletteScale: 1,
       paletteOffset: 0,
       bandSpacing: 10,

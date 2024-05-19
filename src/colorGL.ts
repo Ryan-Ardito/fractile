@@ -1,10 +1,8 @@
 import { ExpressionValue } from "ol/style/webgl";
 
-const HUE_SCALE = ["var", "hueScale"];
-const BASE_CONTRAST = ["var", "baseContrast"];
+const HUE_SCALE = 360;
+const BASE_CONTRAST = 0.5;
 const ITER_FALLOFF = ["var", "iterFalloff"];
-const DITHER_STRENGTH = ["var", "ditherStrength"];
-const SMOOTH_COLOR = ["var", "smoothColor"];
 
 const PALETTE_SCALE = ["var", "paletteScale"];
 const PALETTE_OFFSET = ["var", "paletteOffset"];
