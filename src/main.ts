@@ -159,7 +159,7 @@ let hue = 0;
 
 const animateHue: FrameRequestCallback = (e) => {
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
-  bandOffset = (bandOffset + 0.5) % Number.MAX_SAFE_INTEGER;
+  bandOffset = (bandOffset + Math.PI / 10) % Number.MAX_SAFE_INTEGER;
   layer.updateStyleVariables({ ["hueOffset"]: hue });
   const hueLabel = document.getElementById("hueOffset")?.previousElementSibling;
   const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
