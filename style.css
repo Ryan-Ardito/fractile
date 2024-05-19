@@ -79,6 +79,7 @@ input {
 
 #animateButton {
   position: fixed;
+  opacity: 60%;
   height: 1.8rem;
   right: 8px;
   top: 10px;

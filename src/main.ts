@@ -241,16 +241,14 @@ if (openButton && floatingBox) {
 
 const animateButton = document.getElementById("animateButton");
 if (animateButton) {
-  animateButton.addEventListener("click", () => {
-    switch (animateColor) {
-      case false:
-        animateColor = true;
-        animateButton.textContent = "stop";
-        requestAnimationFrame(animateHue);
-        break;
-      default:
-        animateColor = false;
-        animateButton.textContent = "animate";
+  animateButton.onclick = () => {
+    if (animateColor) {
+      animateColor = false;
+      animateButton.textContent = "animate";
+    } else {
+      animateColor = true;
+      animateButton.textContent = "stop";
+      requestAnimationFrame(animateHue);
     }
-  });
+  };
 }
