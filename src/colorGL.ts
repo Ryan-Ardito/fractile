@@ -5,12 +5,12 @@ const BASE_CONTRAST = 0.5;
 const ITER_FALLOFF = ["var", "iterFalloff"];
 
 const PALETTE_SCALE = ["var", "paletteScale"];
-const PALETTE_OFFSET = ["var", "paletteOffset"];
 
 const BAND_SPACING = ["var", "bandSpacing"];
 const BAND_CONTRAST = ["var", "bandContrast"];
 const BAND_OFFSET = ["var", "bandOffset"];
 
+const HUE_OFFSET = ["var", "hueOffset"];
 const SATURATION = ["var", "saturation"];
 const LIGHTNESS = ["var", "lightness"];
 
@@ -48,7 +48,7 @@ export const colorPixelExpression = (): ExpressionValue => {
   const adjustedIters = normalizedIters;
   const hue = [
     "%",
-    ["+", ["/", adjustedIters, PALETTE_SCALE], PALETTE_OFFSET],
+    ["+", ["/", adjustedIters, PALETTE_SCALE], HUE_OFFSET],
     HUE_SCALE,
   ];
 

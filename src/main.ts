@@ -34,6 +34,9 @@ if (window.location.hash) {
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   return new Promise((resolve, reject) => {
+    // hacky black real line fix
+    z += 1e-9;
+
     const worker = new Worker(
       new URL("./mandelbrotWorker.ts", import.meta.url),
       { type: "module" }
@@ -78,7 +81,7 @@ const layer = new TileLayer({
     variables: {
       iterFalloff: 24,
       paletteScale: 1,
-      paletteOffset: 0,
+      hueOffset: 0,
       bandSpacing: 10,
       bandContrast: 0.28,
       bandOffset: 0,
@@ -136,7 +139,7 @@ let hue = 0;
 const animateHue: FrameRequestCallback = (e) => {
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
   bandOffset = (bandOffset + 0.5) % Number.MAX_SAFE_INTEGER;
-  layer.updateStyleVariables({ ["paletteOffset"]: hue });
+  layer.updateStyleVariables({ ["hueOffset"]: hue });
   hue = (hue - 1) % 360;
   if (animateColor) {
     setTimeout(() => {
@@ -206,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
     input.oninput = (e: Event) => {
       const target = e.target as HTMLInputElement;
       if (animateButton) {
-        if (target.id === "paletteOffset" || target.id === "bandOffset") {
+        if (target.id === "hueOffset" || target.id === "bandOffset") {
           animateColor = false;
           animateButton.textContent = "animate";
         }

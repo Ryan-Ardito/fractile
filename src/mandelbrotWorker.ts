@@ -12,9 +12,6 @@ const calculateMandelbrotSet = (
   size: number,
   maxIters: number
 ): Uint8Array => {
-  // hacky black real line fix
-  z += 1e-9;
-
   const isInCardioidOrBulb = (x: number, y: number): boolean => {
     let y2 = y * y;
     let q = (x - 0.25) ** 2 + y2;
