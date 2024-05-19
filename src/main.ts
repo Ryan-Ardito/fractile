@@ -213,6 +213,17 @@ document.onmousedown = () => {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" || event.key === "Esc") {
+      const openButton = document.getElementById("openButton");
+      const floatingBox = document.getElementById("floatingBox");
+      if (floatingBox && openButton) {
+        floatingBox.style.visibility = "collapse";
+        floatingBox.style.opacity = "0%";
+        openButton.textContent = "menu";
+      }
+    }
+  });
   const inputs: NodeListOf<HTMLInputElement> =
     document.querySelectorAll("#floatingBox input");
 
