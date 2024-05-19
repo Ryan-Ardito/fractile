@@ -15,14 +15,31 @@ const SATURATION = ["var", "saturation"];
 const LIGHTNESS = ["var", "lightness"];
 
 const unpackFloat = (): ExpressionValue => {
-  // unpack normalizedIters from Uint8Array, big-endian
-  const b1 = ["*", ["*", ["band", 1], ["^", 2, 16]], 255];
-  const b2 = ["*", ["*", ["band", 2], ["^", 2, 8]], 255];
-  const b3 = ["*", ["*", ["band", 3], ["^", 2, 0]], 255];
-  // unpack fractional part
-  const b4 = ["band", 4];
+  // unpack normalizedIters from Uint8Array
+  const byte1 = ["*", ["band", 1], 255];
+  const byte2 = ["*", ["band", 2], 255];
+  const byte3 = ["*", ["band", 3], 255];
+  const byte4 = ["*", ["band", 4], 255];
 
-  return ["+", b1, ["+", b2, ["+", b3, b4]]];
+  const sign = ["case", [">=", byte4, 128], -1, 1];
+
+  const exponent = [
+    "-",
+    ["+", ["*", ["%", byte4, 128], 2], ["floor", ["/", byte3, 128]]],
+    127,
+  ];
+
+  const mantissa = [
+    "+",
+    1,
+    [
+      "+",
+      ["*", ["%", byte3, 128], ["^", 2, -7]],
+      ["+", ["*", byte2, ["^", 2, -15]], ["*", byte1, ["^", 2, -23]]],
+    ],
+  ];
+
+  return ["*", ["*", sign, mantissa], ["^", 2, exponent]];
 };
 
 export const colorPixelExpression = (): ExpressionValue => {
@@ -83,16 +100,3 @@ const hslToRgb = (
 
   return ["color", red, green, blue, 1];
 };
-
-// const value = ["/", normalizedIters, 2];
-// const red = ["*", ["%", value, 8], 32];
-// const green = ["*", ["%", value, 16], 16];
-// const blue = ["*", ["%", value, 32], 8];
-
-// export const colorPixelExpressionFast: ExpressionValue = [
-//   "color",
-//   red,
-//   green,
-//   blue,
-//   1,
-// ];

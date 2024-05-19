@@ -69,7 +69,9 @@ const calculateMandelbrotSet = (
   const offsetX = -4 + x * scale;
   const offsetY = -4 + y * scale;
 
-  const data = new Uint8Array(size * size * 4);
+  const buffer = new ArrayBuffer(size * size * 4);
+  const view = new DataView(buffer);
+  const data = new Uint8Array(buffer);
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
     let cx = offsetX + (pixelX * scale) / size;
@@ -81,17 +83,10 @@ const calculateMandelbrotSet = (
         const escapeIters = escapeTime(cx, cy, maxIters);
         const normalizedIters = escapeIters % maxIters;
 
-        // pack normalizedIters into Uint8Array, big-endian
-        data[index + 0] = (normalizedIters / 2 ** 16) & 0xff;
-        data[index + 1] = (normalizedIters / 2 ** 8) & 0xff;
-        data[index + 2] = normalizedIters & 0xff;
-        // pack fractional part
-        data[index + 3] = (normalizedIters - Math.floor(normalizedIters)) * 255;
+        // pack normalizedIters into Uint8Array
+        view.setFloat32(index, normalizedIters, true);
       } else {
-        data[index + 0] = 0;
-        data[index + 1] = 0;
-        data[index + 2] = 0;
-        data[index + 3] = 0;
+        view.setFloat32(index, 0, true);
       }
     }
   }
