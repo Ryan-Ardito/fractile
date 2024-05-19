@@ -59,7 +59,7 @@ input {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid #ccc;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 20px;
   transition: all 0.2s;
   z-index: 2000;
@@ -78,6 +78,7 @@ input {
   position: fixed;
   height: 2rem;
   opacity: 40%;
+  border-radius: 6px;
   bottom: 16px;
   left: 12px;
   color: white;
