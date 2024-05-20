@@ -23,6 +23,6 @@ https://ryan-ardito.github.io/fractile/
 - Async front end
 - Parallel processing
 - Progressive rendering
-- Fast logarithmic coloring
+- Smooth animated HSL color
 - Dynamic max iteration scaling
 - Location data in URL for sharing
