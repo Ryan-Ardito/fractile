@@ -25,6 +25,30 @@
         />
       </label>
       <label
+        >Band spacing:
+        <output>5</output>
+        <input
+          type="range"
+          id="bandSpacing"
+          min="0.01"
+          max="10"
+          step="0.01"
+          value="5"
+          oninput="this.previousElementSibling.value = this.value"
+      /></label>
+      <label
+        >Band contrast:
+        <output>0.28</output>
+        <input
+          type="range"
+          id="bandContrast"
+          min="0"
+          max="0.5"
+          step="0.01"
+          value="0.28"
+          oninput="this.previousElementSibling.value = this.value"
+      /></label>
+      <label
         >Hue:
         <output>0</output>
         <input
@@ -72,31 +96,7 @@
           value="5"
           oninput="this.previousElementSibling.value = this.value"
       /></label>
-      <label
-        >Band spacing:
-        <output>5</output>
-        <input
-          type="range"
-          id="bandSpacing"
-          min="0.01"
-          max="10"
-          step="0.01"
-          value="5"
-          oninput="this.previousElementSibling.value = this.value"
-      /></label>
-      <label
-        >Band contrast:
-        <output>0.28</output>
-        <input
-          type="range"
-          id="bandContrast"
-          min="0"
-          max="0.5"
-          step="0.01"
-          value="0.28"
-          oninput="this.previousElementSibling.value = this.value"
-      /></label>
-      <label
+      <!-- <label
         >Band offset:
         <output>0</output>
         <input
@@ -117,7 +117,7 @@
           max="60"
           value="24"
           oninput="this.previousElementSibling.value = this.value"
-      /></label>
+      /></label> -->
     </div>
     <div id="map" class="map"></div>
     <div class="about-info">
