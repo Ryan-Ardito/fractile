@@ -234,7 +234,8 @@ document.onmousedown = () => {
 document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", function (event) {
     const zoom = view.getZoom();
-    if (zoom) {
+    const floatingBox = document.getElementById("floatingBox");
+    if (zoom && floatingBox?.style.visibility !== "visible") {
       if (event.key === "ArrowUp") {
         view.adjustCenter([0, BASE_PIXEL_WIDTH / Math.pow(2, zoom)]);
       }
@@ -249,7 +250,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    if (event.key === " " || event.key === "Space") {
+    if (event.key === " " || event.code === "Space") {
       event.preventDefault();
       if (!animateColor) {
         startAnimation();
