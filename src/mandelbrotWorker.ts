@@ -78,7 +78,10 @@ const calculateMandelbrotSet = (
       const index = (pixelY * size + pixelX) * 4;
       if (!isInCardioidOrBulb(cx, cy)) {
         const escapeIters = escapeTime(cx, cy, maxIters);
-        const normalizedIters = escapeIters % maxIters;
+        let normalizedIters = escapeIters;
+        if (escapeIters === maxIters) {
+          normalizedIters = 0;
+        }
 
         // pack normalizedIters into Uint8Array
         view.setFloat32(index, normalizedIters, true);

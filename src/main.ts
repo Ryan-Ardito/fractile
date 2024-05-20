@@ -10,6 +10,7 @@ type ZoomCoords = [number, Coordinate];
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
+const BASE_PIXEL_WIDTH = 156543.03392804096;
 
 const locationFromHash = (hash: string): ZoomCoords => {
   const trim_hash = hash.replace("#map=", "");
@@ -159,7 +160,7 @@ let hue = 0;
 
 const animateHue: FrameRequestCallback = (e) => {
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
-  bandOffset = (bandOffset + Math.PI / 10) % Number.MAX_SAFE_INTEGER;
+  bandOffset = bandOffset + Math.PI / 10;
   layer.updateStyleVariables({ ["hueOffset"]: hue });
   const hueLabel = document.getElementById("hueOffset")?.previousElementSibling;
   const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
@@ -232,7 +233,23 @@ document.onmousedown = () => {
 
 document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", function (event) {
-    if (event.key === " ") {
+    const zoom = view.getZoom();
+    if (zoom) {
+      if (event.key === "ArrowUp") {
+        view.adjustCenter([0, BASE_PIXEL_WIDTH / Math.pow(2, zoom)]);
+      }
+      if (event.key === "ArrowDown") {
+        view.adjustCenter([0, (-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom)]);
+      }
+      if (event.key === "ArrowRight") {
+        view.adjustCenter([BASE_PIXEL_WIDTH / Math.pow(2, zoom), 0]);
+      }
+      if (event.key === "ArrowLeft") {
+        view.adjustCenter([(-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom), 0]);
+      }
+    }
+
+    if (event.key === " " || event.key === "Space") {
       event.preventDefault();
       if (!animateColor) {
         startAnimation();
@@ -240,6 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
         stopAnimation();
       }
     }
+
     if (event.key === "Escape" || event.key === "Esc") {
       const openButton = document.getElementById("openButton");
       const floatingBox = document.getElementById("floatingBox");
