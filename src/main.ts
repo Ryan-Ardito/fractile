@@ -272,10 +272,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
-  const inputs = document.querySelectorAll("#floatingBox input");
+  const inputs =
+    document.querySelectorAll<HTMLInputElement>("#floatingBox input");
 
-  inputs.forEach((input) => {
-    input.addEventListener("input", (e: Event) => {
+  inputs.forEach((input, index) => {
+    input.addEventListener("input", (e) => {
       const target = e.target as HTMLInputElement;
 
       if (target.id === "hueOffset") {
@@ -292,6 +293,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const id = target.id;
       const value = parseFloat(target.value);
       layer.updateStyleVariables({ [id]: value });
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const nextIndex = (index + 1) % inputs.length;
+        inputs[nextIndex].focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const prevIndex = (index - 1 + inputs.length) % inputs.length;
+        inputs[prevIndex].focus();
+      }
     });
   });
 });
