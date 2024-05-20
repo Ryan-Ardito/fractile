@@ -58,22 +58,10 @@ export const colorPixelExpression = (): ExpressionValue => {
 
   const saturation = ["*", variance, SATURATION];
 
-  const falloff = ["/", ["-", adjustedIters, 1], ITER_FALLOFF];
-  const condition = ["<", adjustedIters, ["+", ITER_FALLOFF, 1]];
-  const lightness = [
-    "case",
-    condition,
-    ["*", ["*", LIGHTNESS, variance], falloff],
-    ["*", LIGHTNESS, variance],
-  ];
+  const falloff = ["clamp", ["/", ["-", adjustedIters, 1], ITER_FALLOFF], 0, 1];
+  const lightness = ["*", ["*", LIGHTNESS, variance], falloff];
 
-  const blackPixel = ["color", 0, 0, 0, 1];
-  return [
-    "case",
-    ["==", adjustedIters, 0],
-    blackPixel,
-    hslToRgb(hue, saturation, lightness),
-  ];
+  return hslToRgb(hue, saturation, lightness);
 };
 
 const hslToRgb = (
