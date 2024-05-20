@@ -323,7 +323,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (target.id === "bandSpacing") {
-        const bandSpacing = 2 ** (parseFloat(target.value) - 2);
+        const bandSpacing = 2 ** (parseFloat(target.value));
         layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
         return;
       }
