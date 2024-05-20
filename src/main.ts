@@ -255,17 +255,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const zoom = view.getZoom();
     const floatingBox = document.getElementById("floatingBox");
     if (zoom && floatingBox?.style.visibility !== "visible") {
-      if (event.key === "ArrowUp") {
-        view.adjustCenter([0, BASE_PIXEL_WIDTH / Math.pow(2, zoom)]);
-      }
-      if (event.key === "ArrowDown") {
-        view.adjustCenter([0, (-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom)]);
-      }
-      if (event.key === "ArrowRight") {
-        view.adjustCenter([BASE_PIXEL_WIDTH / Math.pow(2, zoom), 0]);
-      }
-      if (event.key === "ArrowLeft") {
-        view.adjustCenter([(-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom), 0]);
+      switch (event.key) {
+        case "ArrowUp":
+          view.adjustCenter([0, BASE_PIXEL_WIDTH / Math.pow(2, zoom)]);
+          break;
+        case "ArrowDown":
+          view.adjustCenter([0, (-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom)]);
+          break;
+        case "ArrowRight":
+          view.adjustCenter([BASE_PIXEL_WIDTH / Math.pow(2, zoom), 0]);
+          break;
+        case "ArrowLeft":
+          view.adjustCenter([(-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom), 0]);
+          break;
+        default:
+          break;
       }
     }
 
