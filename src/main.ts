@@ -83,7 +83,7 @@ const layer = new TileLayer({
       iterFalloff: 24,
       paletteScale: 1,
       hueOffset: 0,
-      bandSpacing: 10,
+      bandSpacing: 8,
       bandContrast: 0.28,
       bandOffset: 0,
       saturation: 0.8,
@@ -292,6 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
   const inputs =
     document.querySelectorAll<HTMLInputElement>("#floatingBox input");
 
@@ -311,7 +312,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (target.id === "animationSpeed") {
-        animationSpeed = parseInt(target.value);
+        animationSpeed = parseFloat(target.value);
+        return;
+      }
+
+      if (target.id === "paletteScale") {
+        const paletteScale = 2 ** (parseFloat(target.value) - 5);
+        layer.updateStyleVariables({ ["paletteScale"]: paletteScale });
+        return;
+      }
+
+      if (target.id === "bandSpacing") {
+        const bandSpacing = 2 ** (parseFloat(target.value) - 2);
+        layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
         return;
       }
 
