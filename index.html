@@ -25,6 +25,18 @@
         />
       </label>
       <label
+        >Palette scale:
+        <output>5</output>
+        <input
+          type="range"
+          id="paletteScale"
+          min="0.01"
+          max="10"
+          step="0.01"
+          value="5"
+          oninput="this.previousElementSibling.value = this.value"
+      /></label>
+      <label
         >Band spacing:
         <output>5</output>
         <input
@@ -82,18 +94,6 @@
           max="2"
           step="0.01"
           value="1"
-          oninput="this.previousElementSibling.value = this.value"
-      /></label>
-      <label
-        >Palette scale:
-        <output>5</output>
-        <input
-          type="range"
-          id="paletteScale"
-          min="0.01"
-          max="10"
-          step="0.01"
-          value="5"
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <!-- <label
