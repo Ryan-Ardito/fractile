@@ -13,10 +13,10 @@ const calculateMandelbrotSet = (
   maxIters: number
 ): Uint8Array => {
   const isInCardioidOrBulb = (x: number, y: number): boolean => {
-    let y2 = y * y;
-    let q = (x - 0.25) ** 2 + y2;
-    let inCardioid = q * (q + (x - 0.25)) < 0.25 * y2;
-    let inBulb = (x + 1.0) ** 2 + y2 < 0.0625;
+    const y2 = y * y;
+    const q = (x - 0.25) ** 2 + y2;
+    const inCardioid = q * (q + (x - 0.25)) < 0.25 * y2;
+    const inBulb = (x + 1.0) ** 2 + y2 < 0.0625;
     return inCardioid || inBulb;
   };
 

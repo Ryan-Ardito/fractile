@@ -110,12 +110,12 @@ const map = new Map({
 });
 
 const startAnimation = () => {
-  if (animateColor) {
+  if (animatingColor) {
     return;
   }
 
-  animateColor = true;
-  requestAnimationFrame(animateHue);
+  animatingColor = true;
+  requestAnimationFrame(animateColor);
   const animateButton = document.getElementById("animateButton");
   if (animateButton) {
     animateButton.textContent = "stop";
@@ -123,7 +123,7 @@ const startAnimation = () => {
 };
 
 const stopAnimation = () => {
-  animateColor = false;
+  animatingColor = false;
   const animateButton = document.getElementById("animateButton");
   if (animateButton) {
     animateButton.textContent = "animate";
@@ -154,27 +154,30 @@ const updatePermalink = () => {
   window.history.replaceState(state, "map", hash);
 };
 
-let animateColor = false;
+let animatingColor = false;
 let bandOffset = 0;
 let hue = 0;
 
-const animateHue: FrameRequestCallback = (e) => {
+const animateColor: FrameRequestCallback = (e) => {
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
   bandOffset = bandOffset + Math.PI / 10;
+
   layer.updateStyleVariables({ ["hueOffset"]: hue });
-  const hueLabel = document.getElementById("hueOffset")?.previousElementSibling;
-  const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
-  if (hueInput && hueLabel) {
-    hueInput.value = hue.toString();
-    hueLabel.textContent = hue.toString();
-  }
   if (hue < -179) {
     hue = 179;
   } else {
     hue -= 1;
   }
-  if (animateColor) {
-    requestAnimationFrame(animateHue);
+
+  const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
+  const hueLabel = hueInput.previousElementSibling;
+  if (hueInput && hueLabel) {
+    hueInput.value = hue.toString();
+    hueLabel.textContent = hue.toString();
+  }
+
+  if (animatingColor) {
+    requestAnimationFrame(animateColor);
   }
 };
 
@@ -185,8 +188,8 @@ window.addEventListener("hashchange", (ev) => {
     const url = ev.newURL;
     const hash = url.substring(url.indexOf("#"));
     const [zoom, center] = locationFromHash(hash);
-    map.getView().setCenter(center);
     map.getView().setZoom(zoom);
+    map.getView().setCenter(center);
     const state = {
       zoom: mapView.getZoom(),
       center: mapView.getCenter(),
@@ -232,7 +235,7 @@ document.onmousedown = () => {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-  document.addEventListener("keydown", function (event) {
+  document.addEventListener("keydown", (event) => {
     const zoom = view.getZoom();
     const floatingBox = document.getElementById("floatingBox");
     if (zoom && floatingBox?.style.visibility !== "visible") {
@@ -252,7 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (event.key === " " || event.code === "Space") {
       event.preventDefault();
-      if (!animateColor) {
+      if (!animatingColor) {
         startAnimation();
       } else {
         stopAnimation();
@@ -260,52 +263,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (event.key === "Escape" || event.key === "Esc") {
-      const openButton = document.getElementById("openButton");
+      const menuButton = document.getElementById("menuButton");
       const floatingBox = document.getElementById("floatingBox");
-      if (floatingBox && openButton) {
+      if (floatingBox && menuButton) {
         floatingBox.style.visibility = "collapse";
         floatingBox.style.opacity = "0%";
-        openButton.textContent = "menu";
+        menuButton.textContent = "menu";
       }
     }
   });
-  const inputs: NodeListOf<HTMLInputElement> =
-    document.querySelectorAll("#floatingBox input");
+  const inputs = document.querySelectorAll("#floatingBox input");
 
   inputs.forEach((input) => {
     input.addEventListener("input", (e: Event) => {
       const target = e.target as HTMLInputElement;
+
       if (target.id === "hueOffset") {
         hue = parseInt(target.value);
       }
+
       if (animateButton) {
         if (target.id === "hueOffset" || target.id === "bandOffset") {
-          animateColor = false;
+          animatingColor = false;
           animateButton.textContent = "animate";
         }
       }
-      const id: string = target.id;
-      const value: number = parseFloat(target.value);
+
+      const id = target.id;
+      const value = parseFloat(target.value);
       layer.updateStyleVariables({ [id]: value });
     });
   });
 });
 
-const openButton = document.getElementById("openButton");
+const menuButton = document.getElementById("menuButton");
 const floatingBox = document.getElementById("floatingBox");
 
-if (openButton && floatingBox) {
-  openButton.onclick = () => {
+if (menuButton && floatingBox) {
+  menuButton.onclick = () => {
     switch (floatingBox.style.visibility) {
       case "visible":
         floatingBox.style.visibility = "collapse";
         floatingBox.style.opacity = "0%";
-        openButton.textContent = "menu";
+        menuButton.textContent = "menu";
         break;
       default:
         floatingBox.style.visibility = "visible";
         floatingBox.style.opacity = "100%";
-        openButton.textContent = "close";
+        menuButton.textContent = "close";
     }
   };
 } else {
@@ -316,7 +321,7 @@ const animateButton = document.getElementById("animateButton");
 if (animateButton) {
   animateButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (!animateColor) {
+    if (!animatingColor) {
       startAnimation();
     } else {
       stopAnimation();
