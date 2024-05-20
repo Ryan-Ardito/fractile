@@ -24,8 +24,8 @@ const locationFromHash = (hash: string): ZoomCoords => {
   }
 };
 
-let zoom = 3;
-let center: Coordinate = [-2500000, 0];
+let zoom = 4;
+let center: Coordinate = [-1200000, 0];
 
 if (window.location.hash) {
   try {
@@ -64,12 +64,12 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
   });
 };
 
-const extent: Extent = [-80000000, -40000000, 60000000, 40000000];
+const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
 
 const view = new View({
   multiWorld: true,
   extent,
-  minZoom: 2,
+  minZoom: 3,
   maxZoom: 42,
   enableRotation: false,
   center,

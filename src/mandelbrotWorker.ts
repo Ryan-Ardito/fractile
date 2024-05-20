@@ -62,9 +62,9 @@ const calculateMandelbrotSet = (
     return maxIterations;
   };
 
-  const scale = 2 ** -z * 8;
-  const offsetX = -4 + x * scale;
-  const offsetY = -4 + y * scale;
+  const scale = 2 ** -z * 16;
+  const offsetX = -8 + x * scale;
+  const offsetY = -8 + y * scale;
 
   const buffer = new ArrayBuffer(size * size * 4);
   const view = new DataView(buffer);
