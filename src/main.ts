@@ -159,10 +159,10 @@ let bandOffset = 0;
 let hue = 0;
 
 let prevFrameTime: number | null = null;
-let animationSpeed = 60;
+let animationSpeed = 5;
 
 const animateColor: FrameRequestCallback = (timestamp) => {
-  const frameDuration = 1000 / animationSpeed;
+  const frameDuration = 1000 / 2 ** animationSpeed;
 
   if (!prevFrameTime) prevFrameTime = timestamp;
   const elapsed = timestamp - prevFrameTime;

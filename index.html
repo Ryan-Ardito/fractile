@@ -13,13 +13,14 @@
       <button id="animateButton">animate</button>
       <label
         >Animation speed:
-        <output>60</output>
+        <output>5</output>
         <input
           type="range"
           id="animationSpeed"
           min="1"
-          max="1000"
-          value="60"
+          max="10"
+          step="0.1"
+          value="5"
           oninput="this.previousElementSibling.value = this.value"
         />
       </label>
