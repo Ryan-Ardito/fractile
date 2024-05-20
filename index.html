@@ -12,6 +12,18 @@
     <div id="floatingBox">
       <button id="animateButton">animate</button>
       <label
+        >Animation speed:
+        <output>60</output>
+        <input
+          type="range"
+          id="animationSpeed"
+          min="1"
+          max="1000"
+          value="60"
+          oninput="this.previousElementSibling.value = this.value"
+        />
+      </label>
+      <label
         >Hue:
         <output>0</output>
         <input

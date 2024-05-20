@@ -158,26 +158,42 @@ let animatingColor = false;
 let bandOffset = 0;
 let hue = 0;
 
-const animateColor: FrameRequestCallback = (e) => {
-  layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
-  bandOffset = bandOffset + Math.PI / 10;
+let prevFrameTime: number | null = null;
+let animationSpeed = 60;
 
-  layer.updateStyleVariables({ ["hueOffset"]: hue });
-  if (hue < -179) {
-    hue = 179;
-  } else {
-    hue -= 1;
+const animateColor: FrameRequestCallback = (timestamp) => {
+  const frameDuration = 1000 / animationSpeed;
+
+  if (!prevFrameTime) prevFrameTime = timestamp;
+  const elapsed = timestamp - prevFrameTime;
+  prevFrameTime = timestamp;
+  const framesPassed = elapsed / frameDuration;
+
+  bandOffset = bandOffset + (Math.PI / 10) * framesPassed;
+  if (bandOffset >= Number.MAX_SAFE_INTEGER) {
+    bandOffset = 0;
   }
+  layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
+
+  if (hue <= -178) {
+    hue = 179 - 1 * framesPassed;
+  } else {
+    hue -= 1 * framesPassed;
+  }
+  layer.updateStyleVariables({ ["hueOffset"]: hue });
 
   const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
   const hueLabel = hueInput.previousElementSibling;
   if (hueInput && hueLabel) {
-    hueInput.value = hue.toString();
-    hueLabel.textContent = hue.toString();
+    const adjHue = Math.round(hue);
+    hueInput.value = adjHue.toString();
+    hueLabel.textContent = adjHue.toString();
   }
 
   if (animatingColor) {
     requestAnimationFrame(animateColor);
+  } else {
+    prevFrameTime = null;
   }
 };
 
@@ -288,6 +304,11 @@ document.addEventListener("DOMContentLoaded", () => {
           animatingColor = false;
           animateButton.textContent = "animate";
         }
+      }
+
+      if (target.id === "animationSpeed") {
+        animationSpeed = parseInt(target.value);
+        return;
       }
 
       const id = target.id;
