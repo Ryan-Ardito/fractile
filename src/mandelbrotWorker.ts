@@ -1,4 +1,8 @@
-const LN_2 = 0.6931471805599453;
+const LN_2 = Math.log(2);
+const PIXEL_NUM_BYTES = 4;
+
+const MAP_SCALE = 16;
+const MAP_OFFSET = -8;
 
 const BAILOUT = 24;
 const PERIODICITY_THRESHOLD = 1e-12;
@@ -58,11 +62,11 @@ const getMandelbrotTile = (
   size: number,
   maxIters: number
 ): Uint8Array => {
-  const scale = 2 ** -z * 16;
-  const offsetX = -8 + x * scale;
-  const offsetY = -8 + y * scale;
+  const scale = 2 ** -z * MAP_SCALE;
+  const offsetX = MAP_OFFSET + x * scale;
+  const offsetY = MAP_OFFSET + y * scale;
 
-  const buffer = new ArrayBuffer(size * size * 4);
+  const buffer = new ArrayBuffer(size * size * PIXEL_NUM_BYTES);
   const view = new DataView(buffer);
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
@@ -70,7 +74,7 @@ const getMandelbrotTile = (
     for (let pixelY = 0; pixelY < size; pixelY++) {
       let cy = offsetY + (pixelY * scale) / size;
 
-      const pixelIdx = (pixelY * size + pixelX) * 4;
+      const pixelIdx = (pixelY * size + pixelX) * PIXEL_NUM_BYTES;
 
       if (isInCardioidOrBulb(cx, cy)) {
         view.setFloat32(pixelIdx, 0, true);

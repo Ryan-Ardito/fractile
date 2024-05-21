@@ -39,8 +39,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
     z += 1e-9;
 
     const worker = new Worker(
-      new URL("./mandelbrotWorker.ts", import.meta.url),
-      { type: "module" }
+      new URL("./mandelbrotWorker.ts", import.meta.url)
     );
 
     worker.onmessage = (e) => {
@@ -323,7 +322,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (target.id === "bandSpacing") {
-        const bandSpacing = 2 ** (parseFloat(target.value));
+        const bandSpacing = 2 ** parseFloat(target.value);
         layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
         return;
       }
