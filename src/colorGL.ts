@@ -1,22 +1,5 @@
 import { ExpressionValue } from "ol/style/webgl";
 
-const RECIPROCAL_60 = 0.016666666666666666;
-const RECIPROCAL_128 = 0.0078125;
-
-const HUE_SCALE = 360;
-const BASE_CONTRAST = 0.5;
-const ITER_FALLOFF = ["var", "iterFalloff"];
-
-const PALETTE_SCALE = ["var", "paletteScale"];
-
-const BAND_SPACING = ["var", "bandSpacing"];
-const BAND_CONTRAST = ["var", "bandContrast"];
-const BAND_OFFSET = ["var", "bandOffset"];
-
-const HUE_OFFSET = ["var", "hueOffset"];
-const SATURATION = ["var", "saturation"];
-const LIGHTNESS = ["var", "lightness"];
-
 const unpackFloat = (): ExpressionValue => {
   // unpack normalizedIters from Uint8Array
   const byte1 = ["*", ["band", 1], 255];
@@ -24,11 +7,11 @@ const unpackFloat = (): ExpressionValue => {
   const byte3 = ["*", ["band", 3], 255];
   const byte4 = ["*", ["band", 4], 255];
 
-  const signBit = ["floor", ["*", byte4, RECIPROCAL_128]];
+  const signBit = ["floor", ["*", byte4, 1 / 128]];
   const sign = ["-", 1, ["*", signBit, 2]];
 
   const exPart1 = ["*", ["%", byte4, 128], 2];
-  const exPart2 = ["floor", ["*", byte3, RECIPROCAL_128]];
+  const exPart2 = ["floor", ["*", byte3, 1 / 128]];
   const exponent = ["-", ["+", exPart1, exPart2], 127];
 
   const manPart1 = ["*", ["%", byte3, 128], ["^", 2, -7]];
@@ -40,22 +23,33 @@ const unpackFloat = (): ExpressionValue => {
 };
 
 export const colorPixelExpression = (): ExpressionValue => {
+  const hueScale = 360;
+  const baseContrast = 0.5;
+  const iterFalloff = ["var", "iterFalloff"];
+  const paletteScale = ["var", "paletteScale"];
+  const bandSpacing = ["var", "bandSpacing"];
+  const bandContrast = ["var", "bandContrast"];
+  const bandOffset = ["var", "bandOffset"];
+  const hueOffset = ["var", "hueOffset"];
+  const saturation = ["var", "saturation"];
+  const lightness = ["var", "lightness"];
+
   const normalizedIters = unpackFloat();
   const adjIters = normalizedIters;
 
-  const hueIters = ["/", adjIters, PALETTE_SCALE];
-  const hue = ["%", ["+", hueIters, HUE_OFFSET], HUE_SCALE];
+  const hueIters = ["/", adjIters, paletteScale];
+  const pixelHue = ["%", ["+", hueIters, hueOffset], hueScale];
 
-  const sine = ["sin", ["/", ["+", adjIters, BAND_OFFSET], BAND_SPACING]];
-  const sineBand = ["*", BAND_CONTRAST, sine];
-  const variance = ["+", BASE_CONTRAST, sineBand];
+  const sine = ["sin", ["/", ["+", adjIters, bandOffset], bandSpacing]];
+  const sineBand = ["*", bandContrast, sine];
+  const variance = ["+", baseContrast, sineBand];
 
-  const saturation = ["*", variance, SATURATION];
+  const pixelSaturation = ["*", variance, saturation];
 
-  const falloff = ["clamp", ["/", ["-", adjIters, 1], ITER_FALLOFF], 0, 1];
-  const lightness = ["*", ["*", LIGHTNESS, variance], falloff];
+  const falloff = ["clamp", ["/", ["-", adjIters, 1], iterFalloff], 0, 1];
+  const pixelLightness = ["*", ["*", lightness, variance], falloff];
 
-  return hslToRgb(hue, saturation, lightness);
+  return hslToRgb(pixelHue, pixelSaturation, pixelLightness);
 };
 
 const hslToRgb = (
@@ -65,7 +59,7 @@ const hslToRgb = (
 ): ExpressionValue => {
   const adjLightness = ["-", 1, ["abs", ["-", ["*", 2, lightness], 1]]];
 
-  const adjHue = ["*", hue, RECIPROCAL_60];
+  const adjHue = ["*", hue, 1 / 60];
   const normalizedHue = ["-", 1, ["abs", ["-", ["%", adjHue, 2], 1]]];
 
   const c = ["*", adjLightness, saturation];
