@@ -27,42 +27,32 @@ const unpackFloat = (): ExpressionValue => {
   const signBit = ["floor", ["*", byte4, RECIPROCAL_128]];
   const sign = ["-", 1, ["*", signBit, 2]];
 
-  const exponent = [
-    "-",
-    ["+", ["*", ["%", byte4, 128], 2], ["floor", ["*", byte3, RECIPROCAL_128]]],
-    127,
-  ];
+  const exPart1 = ["*", ["%", byte4, 128], 2];
+  const exPart2 = ["floor", ["*", byte3, RECIPROCAL_128]];
+  const exponent = ["-", ["+", exPart1, exPart2], 127];
 
-  const mantissa = [
-    "+",
-    1,
-    [
-      "+",
-      ["*", ["%", byte3, 128], ["^", 2, -7]],
-      ["+", ["*", byte2, ["^", 2, -15]], ["*", byte1, ["^", 2, -23]]],
-    ],
-  ];
+  const manPart1 = ["*", ["%", byte3, 128], ["^", 2, -7]];
+  const manPart2 = ["*", byte2, ["^", 2, -15]];
+  const manPart3 = ["*", byte1, ["^", 2, -23]];
+  const mantissa = ["+", 1, ["+", manPart1, ["+", manPart2, manPart3]]];
 
   return ["*", ["*", sign, mantissa], ["^", 2, exponent]];
 };
 
 export const colorPixelExpression = (): ExpressionValue => {
   const normalizedIters = unpackFloat();
+  const adjIters = normalizedIters;
 
-  const adjustedIters = normalizedIters;
-  const hue = [
-    "%",
-    ["+", ["/", adjustedIters, PALETTE_SCALE], HUE_OFFSET],
-    HUE_SCALE,
-  ];
+  const hueIters = ["/", adjIters, PALETTE_SCALE];
+  const hue = ["%", ["+", hueIters, HUE_OFFSET], HUE_SCALE];
 
-  const sine = ["sin", ["/", ["+", adjustedIters, BAND_OFFSET], BAND_SPACING]];
+  const sine = ["sin", ["/", ["+", adjIters, BAND_OFFSET], BAND_SPACING]];
   const sineBand = ["*", BAND_CONTRAST, sine];
   const variance = ["+", BASE_CONTRAST, sineBand];
 
   const saturation = ["*", variance, SATURATION];
 
-  const falloff = ["clamp", ["/", ["-", adjustedIters, 1], ITER_FALLOFF], 0, 1];
+  const falloff = ["clamp", ["/", ["-", adjIters, 1], ITER_FALLOFF], 0, 1];
   const lightness = ["*", ["*", LIGHTNESS, variance], falloff];
 
   return hslToRgb(hue, saturation, lightness);
