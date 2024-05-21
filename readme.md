@@ -8,11 +8,11 @@ https://ryan-ardito.github.io/fractile/
 
 - **Click-and-drag**: Pan
 - **Scroll wheel**: Zoom in/out
-- **Shift + drag**: Zoom to selection
+- **Shift + drag**: Zoom in to selected area
+- **Space bar**: Play/pause animated colors
 - **F11**: Fullscreen
-- **Arrow keys**: Move one pixel
-- **Double-click**: Zoom in
-- **Shift + double-click**: Zoom out
+- **Escape**: Close menu
+- **Arrow keys**: Pan one pixel
 
 ### Mobile
 
