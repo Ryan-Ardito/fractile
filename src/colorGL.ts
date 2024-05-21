@@ -24,7 +24,8 @@ const unpackFloat = (): ExpressionValue => {
   const byte3 = ["*", ["band", 3], 255];
   const byte4 = ["*", ["band", 4], 255];
 
-  const sign = ["case", [">=", byte4, 128], -1, 1];
+  const signBit = ["floor", ["*", byte4, RECIPROCAL_128]];
+  const sign = ["-", 1, ["*", signBit, 2]];
 
   const exponent = [
     "-",
