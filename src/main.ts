@@ -191,6 +191,16 @@ const animateColor: FrameRequestCallback = (timestamp) => {
     hueLabel.textContent = adjHue.toString();
   }
 
+  const bandOffsetInput = document.getElementById(
+    "bandOffset"
+  ) as HTMLInputElement;
+  const bandOffsetLabel = bandOffsetInput.previousElementSibling;
+  if (bandOffsetInput && bandOffsetLabel) {
+    const adjBandOffset = (bandOffset / Math.PI).toFixed(2).toString();
+    bandOffsetInput.value = adjBandOffset;
+    bandOffsetLabel.textContent = adjBandOffset;
+  }
+
   if (animatingColor) {
     requestAnimationFrame(animateColor);
   } else {
@@ -321,6 +331,10 @@ document.addEventListener("DOMContentLoaded", () => {
         case "hueOffset":
           hueOffset = parseInt(target.value);
           layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
+          break;
+        case "bandOffset":
+          bandOffset = parseFloat(target.value) * Math.PI;
+          layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
           break;
         default:
           const id = target.id;

@@ -12,7 +12,7 @@
     <div id="floatingBox">
       <button id="animateButton">animate</button>
       <label
-        >Animation speed:
+        >animation speed:
         <output>5</output>
         <input
           type="range"
@@ -25,7 +25,7 @@
         />
       </label>
       <label
-        >Palette scale:
+        >palette scale:
         <output>5</output>
         <input
           type="range"
@@ -37,7 +37,7 @@
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >Band spacing:
+        >band spacing:
         <output>3</output>
         <input
           type="range"
@@ -49,7 +49,7 @@
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >Band contrast:
+        >band contrast:
         <output>0.28</output>
         <input
           type="range"
@@ -61,7 +61,19 @@
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >Hue:
+        >band offset:
+        <output>0</output>
+        <input
+          type="range"
+          id="bandOffset"
+          min="-1"
+          max="1"
+          step="0.01"
+          value="0"
+          oninput="this.previousElementSibling.value = this.value"
+      /></label>
+      <label
+        >hue:
         <output>0</output>
         <input
           type="range"
@@ -73,7 +85,7 @@
         />
       </label>
       <label
-        >Saturation:
+        >saturation:
         <output>0.8</output>
         <input
           type="range"
@@ -85,7 +97,7 @@
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
-        >Lightness:
+        >lightness:
         <output>1</output>
         <input
           type="range"
@@ -97,17 +109,6 @@
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <!-- <label
-        >Band offset:
-        <output>0</output>
-        <input
-          type="range"
-          id="bandOffset"
-          min="-180"
-          max="180"
-          value="0"
-          oninput="this.previousElementSibling.value = this.value"
-      /></label>
-      <label
         >Falloff:
         <output>24</output>
         <input
