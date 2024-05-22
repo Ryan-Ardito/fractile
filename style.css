@@ -84,7 +84,7 @@ button {
 }
 
 #animateButton {
-  position: fixed;
+  position: absolute;
   opacity: 60%;
   height: 1.8rem;
   right: 8px;
