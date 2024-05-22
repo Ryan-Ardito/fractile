@@ -1,30 +1,8 @@
 import { ExpressionValue } from "ol/style/webgl";
 
-const unpackFloat = (): ExpressionValue => {
-  // unpack normalizedIters from Uint8Array
-  const byte1 = ["*", ["band", 1], 255];
-  const byte2 = ["*", ["band", 2], 255];
-  const byte3 = ["*", ["band", 3], 255];
-  const byte4 = ["*", ["band", 4], 255];
-
-  const signBit = ["floor", ["*", byte4, 1 / 128]];
-  const sign = ["-", 1, ["*", signBit, 2]];
-
-  const exPart1 = ["*", ["%", byte4, 128], 2];
-  const exPart2 = ["floor", ["*", byte3, 1 / 128]];
-  const exponent = ["-", ["+", exPart1, exPart2], 127];
-
-  const manPart1 = ["*", ["%", byte3, 128], ["^", 2, -7]];
-  const manPart2 = ["*", byte2, ["^", 2, -15]];
-  const manPart3 = ["*", byte1, ["^", 2, -23]];
-  const mantissa = ["+", 1, ["+", manPart1, ["+", manPart2, manPart3]]];
-
-  return ["*", ["*", sign, mantissa], ["^", 2, exponent]];
-};
+const HUE_SCALE = 360;
 
 export const colorPixelExpression = (): ExpressionValue => {
-  const hueScale = 360;
-  const baseContrast = 0.5;
   const iterFalloff = ["var", "iterFalloff"];
   const paletteScale = ["var", "paletteScale"];
   const bandSpacing = ["var", "bandSpacing"];
@@ -34,19 +12,18 @@ export const colorPixelExpression = (): ExpressionValue => {
   const saturation = ["var", "saturation"];
   const lightness = ["var", "lightness"];
 
-  const normalizedIters = unpackFloat();
-  const adjIters = normalizedIters;
+  const pixelIters = ["band", 1];
 
-  const hueIters = ["/", adjIters, paletteScale];
-  const pixelHue = ["%", ["+", hueIters, hueOffset], hueScale];
+  const hueIters = ["/", pixelIters, paletteScale];
+  const pixelHue = ["%", ["+", hueIters, hueOffset], HUE_SCALE];
 
-  const sine = ["sin", ["/", ["+", adjIters, bandOffset], bandSpacing]];
+  const sine = ["sin", ["/", ["+", pixelIters, bandOffset], bandSpacing]];
   const sineBand = ["*", bandContrast, sine];
-  const variance = ["+", baseContrast, sineBand];
+  const variance = ["+", 0.5, sineBand];
 
   const pixelSaturation = ["*", variance, saturation];
 
-  const falloff = ["clamp", ["/", ["-", adjIters, 1], iterFalloff], 0, 1];
+  const falloff = ["clamp", ["/", ["-", pixelIters, 1], iterFalloff], 0, 1];
   const pixelLightness = ["*", ["*", lightness, variance], falloff];
 
   return hslToRgb(pixelHue, pixelSaturation, pixelLightness);

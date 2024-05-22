@@ -93,6 +93,7 @@ const layer = new TileLayer({
   preload: Infinity,
   source: new DataTile({
     // interpolate: true,
+    bandCount: 1,
     transition: 0,
     tileSize: TILE_SIZE,
     loader: loadTile,
@@ -155,7 +156,7 @@ const updatePermalink = () => {
 
 let animatingColor = false;
 let bandOffset = 0;
-let hue = 0;
+let hueOffset = 0;
 
 let prevFrameTime: number | null = null;
 let animationSpeed = 5;
@@ -168,23 +169,23 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   prevFrameTime = timestamp;
   const framesPassed = elapsed / frameDuration;
 
-  bandOffset = bandOffset + (Math.PI / 10) * framesPassed;
+  bandOffset = bandOffset + (1 / Math.E) * framesPassed;
   if (bandOffset >= Number.MAX_SAFE_INTEGER) {
     bandOffset = 0;
   }
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
 
-  if (hue <= -178) {
-    hue = 179 - 1 * framesPassed;
+  if (hueOffset <= -179) {
+    hueOffset = 179 - 1 * framesPassed;
   } else {
-    hue -= 1 * framesPassed;
+    hueOffset -= 1 * framesPassed;
   }
-  layer.updateStyleVariables({ ["hueOffset"]: hue });
+  layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
 
   const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
   const hueLabel = hueInput.previousElementSibling;
   if (hueInput && hueLabel) {
-    const adjHue = Math.round(hue);
+    const adjHue = Math.round(hueOffset);
     hueInput.value = adjHue.toString();
     hueLabel.textContent = adjHue.toString();
   }
@@ -267,8 +268,6 @@ document.addEventListener("DOMContentLoaded", () => {
         case "ArrowLeft":
           view.adjustCenter([(-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom), 0]);
           break;
-        default:
-          break;
       }
     }
 
@@ -299,10 +298,6 @@ document.addEventListener("DOMContentLoaded", () => {
     input.addEventListener("input", (e) => {
       const target = e.target as HTMLInputElement;
 
-      if (target.id === "hueOffset") {
-        hue = parseInt(target.value);
-      }
-
       if (animateButton) {
         if (target.id === "hueOffset" || target.id === "bandOffset") {
           animatingColor = false;
@@ -310,26 +305,28 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      if (target.id === "animationSpeed") {
-        animationSpeed = parseFloat(target.value);
-        return;
+      switch (target.id) {
+        case "animationSpeed":
+          animationSpeed = parseFloat(target.value);
+          break;
+        case "paletteScale":
+          const paletteScale = 2 ** (parseFloat(target.value) - 5);
+          layer.updateStyleVariables({ ["paletteScale"]: paletteScale });
+          break;
+        case "bandSpacing":
+          const bandSpacing = 2 ** parseFloat(target.value);
+          layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
+          break;
+        case "hueOffset":
+          hueOffset = parseInt(target.value);
+          layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
+          break;
+        default:
+          const id = target.id;
+          const value = parseFloat(target.value);
+          layer.updateStyleVariables({ [id]: value });
+          break;
       }
-
-      if (target.id === "paletteScale") {
-        const paletteScale = 2 ** (parseFloat(target.value) - 5);
-        layer.updateStyleVariables({ ["paletteScale"]: paletteScale });
-        return;
-      }
-
-      if (target.id === "bandSpacing") {
-        const bandSpacing = 2 ** parseFloat(target.value);
-        layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
-        return;
-      }
-
-      const id = target.id;
-      const value = parseFloat(target.value);
-      layer.updateStyleVariables({ [id]: value });
     });
 
     input.addEventListener("keydown", (e) => {

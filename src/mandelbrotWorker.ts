@@ -1,5 +1,4 @@
 const LN_2 = Math.log(2);
-const PIXEL_NUM_BYTES = 4;
 
 const MAP_SCALE = 16;
 const MAP_OFFSET = -8;
@@ -61,33 +60,29 @@ const getMandelbrotTile = (
   y: number,
   size: number,
   maxIters: number
-): Uint8Array => {
-  const scale = 2 ** -z * MAP_SCALE;
-  const offsetX = MAP_OFFSET + x * scale;
-  const offsetY = MAP_OFFSET + y * scale;
+): Float32Array => {
+  const scale = MAP_SCALE * 2 ** -z;
+  const offsetX = x * scale + MAP_OFFSET;
+  const offsetY = y * scale + MAP_OFFSET;
 
-  const buffer = new ArrayBuffer(size * size * PIXEL_NUM_BYTES);
-  const view = new DataView(buffer);
+  const itersTile = new Float32Array(size * size);
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
-    let cx = offsetX + (pixelX * scale) / size;
+    let cx = (pixelX * scale) / size + offsetX;
     for (let pixelY = 0; pixelY < size; pixelY++) {
-      let cy = offsetY + (pixelY * scale) / size;
+      let cy = (pixelY * scale) / size + offsetY;
 
-      const pixelIdx = (pixelY * size + pixelX) * PIXEL_NUM_BYTES;
-
+      const pixelIdx = pixelY * size + pixelX;
       if (isInCardioidOrBulb(cx, cy)) {
-        view.setFloat32(pixelIdx, 0, true);
+        itersTile[pixelIdx] = 0;
         continue;
       }
 
-      const normalizedIters = escapeTime(cx, cy, maxIters);
-      // pack normalizedIters into Uint8Array
-      view.setFloat32(pixelIdx, normalizedIters, true);
+      itersTile[pixelIdx] = escapeTime(cx, cy, maxIters);
     }
   }
 
-  return new Uint8Array(buffer);
+  return itersTile;
 };
 
 onmessage = (e) => {
