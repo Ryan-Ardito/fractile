@@ -312,7 +312,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const target = e.target as HTMLInputElement;
 
       if (animateButton) {
-        if (target.id === "hueOffset" || target.id === "bandOffset") {
+        if (target.id === "hueOffset" && hueSpeed > 0) {
+          animatingColor = false;
+          animateButton.textContent = "animate";
+        }
+        if (target.id === "bandOffset" && bandSpeed > 0) {
           animatingColor = false;
           animateButton.textContent = "animate";
         }
