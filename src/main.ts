@@ -172,18 +172,16 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   const framesPassed = elapsed / frameDuration;
 
   const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
+  bandOffset += bandStep;
   if (bandOffset >= Math.PI) {
-    bandOffset = -Math.PI + bandStep;
-  } else {
-    bandOffset += bandStep;
+    bandOffset -= Math.PI * 2;
   }
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
 
   const hueStep = hueSpeed * framesPassed;
-  if (hueOffset <= -179) {
-    hueOffset = 179 - hueStep;
-  } else {
-    hueOffset -= hueStep;
+  hueOffset -= hueStep;
+  if (hueOffset <= -180) {
+    hueOffset += 360;
   }
   layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
 
