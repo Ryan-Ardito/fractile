@@ -156,7 +156,9 @@ const updatePermalink = () => {
 
 let animatingColor = false;
 let bandOffset = 0;
+let bandSpeed = 1;
 let hueOffset = 0;
+let hueSpeed = 1;
 
 let prevFrameTime: number | null = null;
 let animationSpeed = 5;
@@ -169,17 +171,19 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   prevFrameTime = timestamp;
   const framesPassed = elapsed / frameDuration;
 
+  const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
   if (bandOffset >= Math.PI) {
-    bandOffset = -Math.PI + (Math.PI / 60) * framesPassed;
+    bandOffset = -Math.PI + bandStep;
   } else {
-    bandOffset += (Math.PI / 60) * framesPassed;
+    bandOffset += bandStep;
   }
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
 
+  const hueStep = hueSpeed * framesPassed;
   if (hueOffset <= -179) {
-    hueOffset = 179 - 1 * framesPassed;
+    hueOffset = 179 - hueStep;
   } else {
-    hueOffset -= 1 * framesPassed;
+    hueOffset -= hueStep;
   }
   layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
 
@@ -327,6 +331,11 @@ document.addEventListener("DOMContentLoaded", () => {
         case "bandSpacing":
           const bandSpacing = 2 ** parseFloat(target.value);
           layer.updateStyleVariables({ ["bandSpacing"]: bandSpacing });
+          break;
+        case "bandHueSpeed":
+          const val = parseFloat(target.value);
+          bandSpeed = Math.min(1, (1 - val) * 2);
+          hueSpeed = Math.min(1, val * 2);
           break;
         case "hueOffset":
           hueOffset = parseInt(target.value);
