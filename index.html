@@ -112,6 +112,7 @@
           max="2"
           step="0.01"
           value="0.8"
+          list="oneMarker"
           oninput="this.previousElementSibling.value = this.value"
       /></label>
       <label
@@ -124,8 +125,12 @@
           max="2"
           step="0.01"
           value="1"
+          list="oneMarker"
           oninput="this.previousElementSibling.value = this.value"
       /></label>
+      <datalist id="oneMarker">
+        <option value="1"></option>
+      </datalist>
       <!-- <label
         >Falloff:
         <output>24</output>
