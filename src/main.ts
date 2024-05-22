@@ -169,9 +169,10 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   prevFrameTime = timestamp;
   const framesPassed = elapsed / frameDuration;
 
-  bandOffset = bandOffset + (1 / Math.E) * framesPassed;
-  if (bandOffset >= Number.MAX_SAFE_INTEGER) {
-    bandOffset = 0;
+  if (bandOffset >= Math.PI) {
+    bandOffset = -Math.PI + (Math.PI / 60) * framesPassed;
+  } else {
+    bandOffset += (Math.PI / 60) * framesPassed;
   }
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
 
