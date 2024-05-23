@@ -1,4 +1,10 @@
-import React, { createContext, useState, useContext, ReactNode } from "react";
+import React, {
+  createContext,
+  useState,
+  useContext,
+  ReactNode,
+  useEffect,
+} from "react";
 
 interface AppContextType {
   bandOffset: number;
@@ -46,6 +52,50 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const [bandHueSpeed, setBandHueSpeed] = useState(0.5);
   const [saturation, setSaturation] = useState(0.8);
   const [lightness, setLightness] = useState(1);
+
+  let prevFrameTime: number | undefined = undefined;
+
+  const animateColor: FrameRequestCallback = (timestamp) => {
+    const frameDuration = 1000 / 2 ** animationSpeed;
+
+    if (!prevFrameTime) {
+      prevFrameTime = timestamp;
+    }
+    if (!prevFrameTime) throw "oops";
+    const elapsed = timestamp - prevFrameTime;
+    prevFrameTime = timestamp;
+    const framesPassed = elapsed / frameDuration;
+
+    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
+    let newBandOffset = bandOffset + bandStep;
+    if (newBandOffset > Math.PI) {
+      newBandOffset -= Math.PI * 2;
+    }
+    setBandOffset(newBandOffset);
+
+    const hueStep = hueSpeed * framesPassed;
+    let newHueOffset = hueOffset - hueStep;
+    if (hueOffset < -180) {
+      newHueOffset += 360;
+    }
+    setHueOffset(newHueOffset);
+
+    if (animatingColor) {
+      requestAnimationFrame(animateColor);
+    } else {
+      prevFrameTime = undefined;
+    }
+  };
+
+  useEffect(() => {
+    setAnimatingColor(false);
+  }, [hueOffset, bandOffset]);
+
+  useEffect(() => {
+    if (animatingColor) {
+      requestAnimationFrame(animateColor);
+    }
+  }, [animatingColor]);
 
   return (
     <AppContext.Provider

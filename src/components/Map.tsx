@@ -1,6 +1,6 @@
 import { View } from "ol";
 import { Extent } from "ol/extent";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
@@ -46,82 +46,15 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 export const MapComponent = () => {
   const {
     animatingColor,
-    animationSpeed,
-    bandSpeed,
-    hueSpeed,
     setAnimatingColor,
     bandContrast,
     bandOffset,
-    setBandOffset,
     bandSpacing,
     paletteScale,
     hueOffset,
-    setHueOffset,
     saturation,
     lightness,
   } = useAppContext();
-
-  const [prevFrameTime, setPrevFrameTime] = useState<number | undefined>(
-    undefined
-  );
-
-  const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 1000 / 2 ** animationSpeed;
-
-    if (!prevFrameTime) setPrevFrameTime(timestamp);
-    if (!prevFrameTime) throw "oops";
-    const elapsed = timestamp - prevFrameTime;
-    setPrevFrameTime(timestamp);
-    const framesPassed = elapsed / frameDuration;
-
-    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
-    let newBandOffset = bandOffset + bandStep;
-    if (newBandOffset > Math.PI) {
-      newBandOffset -= Math.PI * 2;
-    }
-    setBandOffset(newBandOffset);
-
-    const hueStep = hueSpeed * framesPassed;
-    let newHueOffset = hueOffset - hueStep;
-    if (hueOffset < -180) {
-      newHueOffset += 360;
-    }
-    setHueOffset(newHueOffset);
-
-    // const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
-    // const hueLabel = hueInput.previousElementSibling;
-    // if (hueInput && hueLabel) {
-    //   const adjHue = Math.round(hueOffset);
-    //   hueInput.value = adjHue.toString();
-    //   hueLabel.textContent = adjHue.toString();
-    // }
-
-    // const bandOffsetInput = document.getElementById(
-    //   "bandOffset"
-    // ) as HTMLInputElement;
-    // const bandOffsetLabel = bandOffsetInput.previousElementSibling;
-    // if (bandOffsetInput && bandOffsetLabel) {
-    //   const adjBandOffset = (bandOffset / Math.PI).toFixed(2).toString();
-    //   bandOffsetInput.value = adjBandOffset;
-    //   bandOffsetLabel.textContent = adjBandOffset;
-    // }
-
-    if (animatingColor) {
-      requestAnimationFrame(animateColor);
-    } else {
-      setPrevFrameTime(undefined);
-    }
-  };
-
-  useEffect(() => {
-    setAnimatingColor(false);
-  }, [hueOffset, bandOffset]);
-
-  useEffect(() => {
-    if (animatingColor) {
-      requestAnimationFrame(animateColor);
-    }
-  }, [animatingColor]);
 
   const zoom = 4;
   const center: Coordinate = [-1200000, 0];
@@ -187,7 +120,8 @@ export const MapComponent = () => {
   });
 
   useEffect(() => {
-    layer.updateStyleVariables({ ["paletteScale"]: paletteScale });
+    const adjPaletteScale = 2 ** (paletteScale - 5);
+    layer.updateStyleVariables({ ["paletteScale"]: adjPaletteScale });
   }, [paletteScale]);
 
   useEffect(() => {
@@ -205,7 +139,8 @@ export const MapComponent = () => {
   }, [hueOffset]);
 
   useEffect(() => {
-    layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
+    const adjBandOffset = bandOffset * Math.PI;
+    layer.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
   }, [bandOffset]);
 
   useEffect(() => {

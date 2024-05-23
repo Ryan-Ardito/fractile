@@ -83,9 +83,7 @@ export const Menu = () => {
             step="0.01"
             value={paletteScale}
             onChange={(e) => {
-              const value = parseFloat(e.target.value);
-              const adjPaletteScale = 2 ** (value - 5);
-              setPaletteScale(adjPaletteScale);
+              setPaletteScale(parseFloat(e.target.value));
             }}
           />
         </label>
@@ -100,9 +98,7 @@ export const Menu = () => {
             step="0.005"
             value={bandSpacing}
             onChange={(e) => {
-              const value = parseFloat(e.target.value);
-              const adjBandSpacing = 2 ** value;
-              setBandSpacing(adjBandSpacing);
+              setBandSpacing(parseFloat(e.target.value));
             }}
           />
         </label>
@@ -132,9 +128,7 @@ export const Menu = () => {
             step="0.01"
             value={bandOffset}
             onChange={(e) => {
-              const value = parseFloat(e.target.value);
-              const adjBandOffset = value * Math.PI;
-              setBandOffset(adjBandOffset);
+              setBandOffset(parseFloat(e.target.value));
             }}
           />
         </label>
