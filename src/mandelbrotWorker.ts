@@ -68,9 +68,9 @@ const getMandelbrotTile = (
   const itersTile = new Float32Array(size * size);
 
   for (let pixelX = 0; pixelX < size; pixelX++) {
-    let cx = (pixelX * scale) / size + offsetX;
+    const cx = (pixelX * scale) / size + offsetX;
     for (let pixelY = 0; pixelY < size; pixelY++) {
-      let cy = (pixelY * scale) / size + offsetY;
+      const cy = (pixelY * scale) / size + offsetY;
 
       const pixelIdx = pixelY * size + pixelX;
       if (isInCardioidOrBulb(cx, cy)) {
