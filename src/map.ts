@@ -5,23 +5,10 @@ import View from "ol/View";
 import { Extent } from "ol/extent";
 import { colorPixelExpression } from "./colorGL";
 import { Coordinate } from "ol/coordinate";
-
-type ZoomCoords = [number, Coordinate];
+import { locationFromHash } from "./listeners";
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
-
-const locationFromHash = (hash: string): ZoomCoords => {
-  const trim_hash = hash.replace("#map=", "");
-  const parts = trim_hash.split("/");
-  if (parts.length === 3) {
-    const zoom = parseFloat(parts[0]);
-    const center: Coordinate = [parseFloat(parts[1]), parseFloat(parts[2])];
-    return [zoom, center];
-  } else {
-    throw new Error("invalid location hash");
-  }
-};
 
 let zoom = 4;
 let center: Coordinate = [-1200000, 0];
@@ -64,7 +51,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 
 const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
 
-const view = new View({
+export const view = new View({
   multiWorld: true,
   extent,
   minZoom: 3,
@@ -107,29 +94,3 @@ export const map = new Map({
   layers: [layer],
   view,
 });
-
-let shouldUpdate = true;
-const mapView = map.getView();
-
-const updatePermalink = () => {
-  if (!shouldUpdate) {
-    shouldUpdate = true;
-    return;
-  }
-
-  const center = mapView.getCenter();
-  const zoom = mapView.getZoom();
-  if (!center || !mapView || !zoom) {
-    return;
-  }
-
-  const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
-  const state = {
-    zoom: mapView.getZoom(),
-    center: mapView.getCenter(),
-  };
-
-  window.history.replaceState(state, "map", hash);
-};
-
-map.on("moveend", updatePermalink);

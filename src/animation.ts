@@ -1,13 +1,33 @@
 import { layer } from "./map";
 
 let animatingColor = false;
-let bandOffset = 0;
-let bandSpeed = 1;
-let hueOffset = 0;
-let hueSpeed = 1;
+export let bandOffset = 0;
+export let bandSpeed = 1;
+export let hueOffset = 0;
+export let hueSpeed = 1;
 
 let prevFrameTime: number | null = null;
 let animationSpeed = 5;
+
+export const setAnimationSpeed = (speed: number) => {
+  animationSpeed = speed;
+};
+
+export const setBandSpeed = (speed: number) => {
+  bandSpeed = speed;
+};
+
+export const setHueSpeed = (speed: number) => {
+  hueSpeed = speed;
+};
+
+export const setHueOffset = (speed: number) => {
+  hueOffset = speed;
+};
+
+export const setBandOffset = (speed: number) => {
+  hueOffset = speed;
+};
 
 const animateColor: FrameRequestCallback = (timestamp) => {
   const frameDuration = 1000 / 2 ** animationSpeed;
@@ -56,11 +76,7 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   }
 };
 
-const startAnimation = () => {
-  if (animatingColor) {
-    return;
-  }
-
+export const startAnimation = () => {
   animatingColor = true;
   requestAnimationFrame(animateColor);
   const animateButton = document.getElementById("animateButton");
@@ -69,11 +85,19 @@ const startAnimation = () => {
   }
 };
 
-const stopAnimation = () => {
+export const stopAnimation = () => {
   animatingColor = false;
   const animateButton = document.getElementById("animateButton");
   if (animateButton) {
     animateButton.textContent = "animate";
+  }
+};
+
+export const toggleAnimation = () => {
+  if (!animatingColor) {
+    startAnimation();
+  } else {
+    stopAnimation();
   }
 };
 
