@@ -1,73 +1,7 @@
-import { Coordinate } from "ol/coordinate";
-import { layer, map, view } from "./map";
+import { layer, view } from "./map";
 import { bandSpeed, hueSpeed, stopAnimation, toggleAnimation } from "./animation";
 
-type ZoomCoords = [number, Coordinate];
-
 const BASE_NUDGE = 156543.03392804096;
-
-const mapView = map.getView();
-let shouldUpdate = true;
-
-export const locationFromHash = (hash: string): ZoomCoords => {
-  const trim_hash = hash.replace("#map=", "");
-  const parts = trim_hash.split("/");
-  if (parts.length === 3) {
-    const zoom = parseFloat(parts[0]);
-    const center: Coordinate = [parseFloat(parts[1]), parseFloat(parts[2])];
-    return [zoom, center];
-  } else {
-    throw new Error("invalid location hash");
-  }
-};
-
-const updatePermalink = () => {
-  if (!shouldUpdate) {
-    shouldUpdate = true;
-    return;
-  }
-
-  const center = mapView.getCenter();
-  const zoom = mapView.getZoom();
-  if (!center || !mapView || !zoom) {
-    return;
-  }
-
-  const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
-  const state = {
-    zoom: mapView.getZoom(),
-    center: mapView.getCenter(),
-  };
-
-  window.history.replaceState(state, "map", hash);
-};
-
-map.on("moveend", updatePermalink);
-
-window.addEventListener("hashchange", (ev) => {
-  try {
-    const url = ev.newURL;
-    const hash = url.substring(url.indexOf("#"));
-    const [zoom, center] = locationFromHash(hash);
-    map.getView().setZoom(zoom);
-    map.getView().setCenter(center);
-    const state = {
-      zoom: mapView.getZoom(),
-      center: mapView.getCenter(),
-    };
-
-    window.history.replaceState(state, "map", hash);
-  } catch {}
-});
-
-window.onpopstate = (event) => {
-  if (event.state === null) {
-    return;
-  }
-  map.getView().setCenter(event.state.center);
-  map.getView().setZoom(event.state.zoom);
-  shouldUpdate = false;
-};
 
 const wakeTime = 1000;
 let timeout: number;
@@ -146,9 +80,10 @@ document.addEventListener("DOMContentLoaded", () => {
         stopAnimation();
       }
 
+          const value = parseFloat(target.value);
       switch (target.id) {
         case "animationSpeed":
-          setAnimationSpeed(parseFloat(target.value));
+          setAnimationSpeed(value);
           break;
         case "paletteScale":
           const paletteScale = 2 ** (parseFloat(target.value) - 5);
@@ -164,12 +99,12 @@ document.addEventListener("DOMContentLoaded", () => {
           setHueSpeed(Math.min(1, val * 2));
           break;
         case "hueOffset":
-          setHueOffset(parseInt(target.value));
-          layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
+          setHueOffset(parseFloat(target.value));
+          layer.updateStyleVariables({ ["hueOffset"]: target.value });
           break;
         case "bandOffset":
           setBandOffset(parseFloat(target.value) * Math.PI);
-          layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
+          layer.updateStyleVariables({ ["bandOffset"]: target.value });
           break;
         default:
           const id = target.id;

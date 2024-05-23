@@ -5,13 +5,26 @@ import View from "ol/View";
 import { Extent } from "ol/extent";
 import { colorPixelExpression } from "./colorGL";
 import { Coordinate } from "ol/coordinate";
-import { locationFromHash } from "./listeners";
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
 
+type ZoomCoords = [number, Coordinate];
+
 let zoom = 4;
 let center: Coordinate = [-1200000, 0];
+
+export const locationFromHash = (hash: string): ZoomCoords => {
+  const trim_hash = hash.replace("#map=", "");
+  const parts = trim_hash.split("/");
+  if (parts.length === 3) {
+    const zoom = parseFloat(parts[0]);
+    const center: Coordinate = [parseFloat(parts[1]), parseFloat(parts[2])];
+    return [zoom, center];
+  } else {
+    throw new Error("invalid location hash");
+  }
+};
 
 if (window.location.hash) {
   try {
@@ -94,3 +107,53 @@ export const map = new Map({
   layers: [layer],
   view,
 });
+
+let shouldUpdate = true;
+
+const updatePermalink = () => {
+  if (!shouldUpdate) {
+    shouldUpdate = true;
+    return;
+  }
+
+  map.on("moveend", updatePermalink);
+
+  window.addEventListener("hashchange", (ev) => {
+    try {
+      const url = ev.newURL;
+      const hash = url.substring(url.indexOf("#"));
+      const [zoom, center] = locationFromHash(hash);
+      map.getView().setZoom(zoom);
+      map.getView().setCenter(center);
+      const state = {
+        zoom: view.getZoom(),
+        center: view.getCenter(),
+      };
+
+      window.history.replaceState(state, "map", hash);
+    } catch {}
+  });
+
+  window.onpopstate = (event) => {
+    if (event.state === null) {
+      return;
+    }
+    map.getView().setCenter(event.state.center);
+    map.getView().setZoom(event.state.zoom);
+    shouldUpdate = false;
+  };
+
+  const center = view.getCenter();
+  const zoom = view.getZoom();
+  if (!center || !view || !zoom) {
+    return;
+  }
+
+  const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
+  const state = {
+    zoom: view.getZoom(),
+    center: view.getCenter(),
+  };
+
+  window.history.replaceState(state, "map", hash);
+};
