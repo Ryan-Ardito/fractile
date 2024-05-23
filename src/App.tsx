@@ -6,9 +6,9 @@ import { AppProvider } from "./AppContext";
 function App() {
   return (
     <AppProvider>
-      <MapComponent />
       <Menu />
       <AboutInfo />
+      <MapComponent />
     </AppProvider>
   );
 }

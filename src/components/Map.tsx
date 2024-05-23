@@ -10,6 +10,7 @@ import { useAppContext } from "../AppContext";
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
+const BASE_NUDGE = 156543.03392804096;
 const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
 
 const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
@@ -44,25 +45,89 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 
 export const MapComponent = () => {
   const {
+    animatingColor,
+    animationSpeed,
+    bandSpeed,
+    hueSpeed,
+    setAnimatingColor,
     bandContrast,
-    setBandContrast,
     bandOffset,
     setBandOffset,
     bandSpacing,
-    setBandSpacing,
     paletteScale,
-    setPaletteScale,
     hueOffset,
     setHueOffset,
     saturation,
-    setSaturation,
     lightness,
-    setLightness,
   } = useAppContext();
 
-  const zoom = 4;
-  const center: Coordinate = [-1200000, 0];
   useEffect(() => {
+    useEffect(() => {
+      stopAnimation();
+    }, [hueOffset, bandOffset]);
+
+    useEffect(() => {
+      if (animatingColor) {
+        requestAnimationFrame(animateColor);
+      }
+    }, [animatingColor]);
+
+    let prevFrameTime: number | null = null;
+
+    const animateColor: FrameRequestCallback = (timestamp) => {
+      const frameDuration = 1000 / 2 ** animationSpeed;
+
+      if (!prevFrameTime) prevFrameTime = timestamp;
+      const elapsed = timestamp - prevFrameTime;
+      prevFrameTime = timestamp;
+      const framesPassed = elapsed / frameDuration;
+
+      const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
+      let newBandOffset = bandOffset + bandStep;
+      if (newBandOffset > Math.PI) {
+        newBandOffset -= Math.PI * 2;
+      }
+      setBandOffset(newBandOffset);
+
+      const hueStep = hueSpeed * framesPassed;
+      let newHueOffset = hueOffset - hueStep;
+      if (hueOffset < -180) {
+        newHueOffset += 360;
+      }
+      setHueOffset(newHueOffset);
+
+      // const hueInput = document.getElementById("hueOffset") as HTMLInputElement;
+      // const hueLabel = hueInput.previousElementSibling;
+      // if (hueInput && hueLabel) {
+      //   const adjHue = Math.round(hueOffset);
+      //   hueInput.value = adjHue.toString();
+      //   hueLabel.textContent = adjHue.toString();
+      // }
+
+      // const bandOffsetInput = document.getElementById(
+      //   "bandOffset"
+      // ) as HTMLInputElement;
+      // const bandOffsetLabel = bandOffsetInput.previousElementSibling;
+      // if (bandOffsetInput && bandOffsetLabel) {
+      //   const adjBandOffset = (bandOffset / Math.PI).toFixed(2).toString();
+      //   bandOffsetInput.value = adjBandOffset;
+      //   bandOffsetLabel.textContent = adjBandOffset;
+      // }
+
+      if (animatingColor) {
+        requestAnimationFrame(animateColor);
+      } else {
+        prevFrameTime = null;
+      }
+    };
+
+    const stopAnimation = () => {
+      setAnimatingColor(false);
+    };
+
+    const zoom = 4;
+    const center: Coordinate = [-1200000, 0];
+
     const view = new View({
       multiWorld: true,
       extent,
@@ -107,27 +172,64 @@ export const MapComponent = () => {
       view,
     });
 
-    useEffect(() => {
-      const adjPaletteScale = 2 ** (paletteScale - 5);
-      layer.updateStyleVariables({ ["paletteScale"]: adjPaletteScale });
-    }, [paletteScale]);
+    // document.addEventListener("keydown", (event) => {
+    //   switch (event.key) {
+    //     case " ":
+    //       event.preventDefault();
+    //       if (animatingColor) {
+    //         setAnimatingColor(false);
+    //       } else {
+    //         setAnimatingColor(false);
+    //       }
+    //       break;
+    //     case "ArrowUp":
+    //       view.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
+    //       break;
+    //     case "ArrowDown":
+    //       view.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
+    //       break;
+    //     case "ArrowRight":
+    //       view.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
+    //       break;
+    //     case "ArrowLeft":
+    //       view.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
+    //       break;
+    //   }
+    // });
 
-    useEffect(() => {
-      const adjBandSpacing = 2 ** bandSpacing;
-      layer.updateStyleVariables({ ["bandSpacing"]: adjBandSpacing });
-    }, [bandSpacing]);
+    // useEffect(() => {
+    //   const adjPaletteScale = 2 ** (paletteScale - 5);
+    //   layer.updateStyleVariables({ ["paletteScale"]: adjPaletteScale });
+    // }, [paletteScale]);
 
-    useEffect(() => {
-      layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
-    }, [hueOffset]);
+    // useEffect(() => {
+    //   const adjBandSpacing = 2 ** bandSpacing;
+    //   layer.updateStyleVariables({ ["bandSpacing"]: adjBandSpacing });
+    // }, [bandSpacing]);
 
-    useEffect(() => {
-      const adjBandOffset = bandOffset * Math.PI;
-      layer.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
-    }, [bandOffset]);
+    // useEffect(() => {
+    //   layer.updateStyleVariables({ ["bandContrast"]: bandContrast });
+    // }, [bandContrast]);
 
-    return () => map.setTarget("map");
+    // useEffect(() => {
+    //   layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
+    // }, [hueOffset]);
+
+    // useEffect(() => {
+    //   const adjBandOffset = bandOffset * Math.PI;
+    //   layer.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
+    // }, [bandOffset]);
+
+    // useEffect(() => {
+    //   layer.updateStyleVariables({ ["saturation"]: saturation });
+    // }, [saturation]);
+
+    // useEffect(() => {
+    //   layer.updateStyleVariables({ ["lightness"]: lightness });
+    // }, [lightness]);
+
+    return () => map.setTarget(undefined);
   }, []);
 
-  return <div id="map" className="map" />;
+  return <div id="map" style={{ width: "100%", height: "100%" }}></div>;
 };
