@@ -1,33 +1,14 @@
+import { useState } from "react";
 import { layer } from "./map";
 
+export const [bandOffset, setBandOffset] = useState(0);
+export const [bandSpeed, setBandSpeed] = useState(1);
+export const [hueOffset, setHueOffset] = useState(0);
+export const [hueSpeed, setHueSpeed] = useState(1);
+
+export const [animationSpeed, setAnimationSpeed] = useState(5);
 let animatingColor = false;
-export let bandOffset = 0;
-export let bandSpeed = 1;
-export let hueOffset = 0;
-export let hueSpeed = 1;
-
 let prevFrameTime: number | null = null;
-let animationSpeed = 5;
-
-export const setAnimationSpeed = (speed: number) => {
-  animationSpeed = speed;
-};
-
-export const setBandSpeed = (speed: number) => {
-  bandSpeed = speed;
-};
-
-export const setHueSpeed = (speed: number) => {
-  hueSpeed = speed;
-};
-
-export const setHueOffset = (speed: number) => {
-  hueOffset = speed;
-};
-
-export const setBandOffset = (speed: number) => {
-  hueOffset = speed;
-};
 
 const animateColor: FrameRequestCallback = (timestamp) => {
   const frameDuration = 1000 / 2 ** animationSpeed;
@@ -38,16 +19,16 @@ const animateColor: FrameRequestCallback = (timestamp) => {
   const framesPassed = elapsed / frameDuration;
 
   const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
-  bandOffset += bandStep;
+  setBandOffset(bandOffset + bandStep);
   if (bandOffset > Math.PI) {
-    bandOffset -= Math.PI * 2;
+    setBandOffset(bandOffset - Math.PI * 2);
   }
   layer.updateStyleVariables({ ["bandOffset"]: bandOffset });
 
   const hueStep = hueSpeed * framesPassed;
-  hueOffset -= hueStep;
+  setHueOffset(hueOffset - hueStep);
   if (hueOffset < -180) {
-    hueOffset += 360;
+    setHueOffset(hueOffset + 360);
   }
   layer.updateStyleVariables({ ["hueOffset"]: hueOffset });
 

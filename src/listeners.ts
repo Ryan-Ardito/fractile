@@ -16,7 +16,7 @@ import {
 
 type ZoomCoords = [number, Coordinate];
 
-const BASE_PIXEL_WIDTH = 156543.03392804096;
+const BASE_NUDGE = 156543.03392804096;
 
 const mapView = map.getView();
 let shouldUpdate = true;
@@ -114,16 +114,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (zoom && floatingBox?.style.visibility !== "visible") {
       switch (event.key) {
         case "ArrowUp":
-          view.adjustCenter([0, BASE_PIXEL_WIDTH / Math.pow(2, zoom)]);
+          view.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
           break;
         case "ArrowDown":
-          view.adjustCenter([0, (-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom)]);
+          view.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
           break;
         case "ArrowRight":
-          view.adjustCenter([BASE_PIXEL_WIDTH / Math.pow(2, zoom), 0]);
+          view.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
           break;
         case "ArrowLeft":
-          view.adjustCenter([(-1 * BASE_PIXEL_WIDTH) / Math.pow(2, zoom), 0]);
+          view.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
           break;
       }
     }
