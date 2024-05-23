@@ -1,18 +1,6 @@
 import { Coordinate } from "ol/coordinate";
 import { layer, map, view } from "./map";
-import {
-  bandOffset,
-  bandSpeed,
-  hueOffset,
-  hueSpeed,
-  setAnimationSpeed,
-  setBandOffset,
-  setBandSpeed,
-  setHueOffset,
-  setHueSpeed,
-  stopAnimation,
-  toggleAnimation,
-} from "./animation";
+import { bandSpeed, hueSpeed, stopAnimation, toggleAnimation } from "./animation";
 
 type ZoomCoords = [number, Coordinate];
 

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { layer } from "./map";
 
-export const [bandOffset, setBandOffset] = useState(0);
-export const [bandSpeed, setBandSpeed] = useState(1);
-export const [hueOffset, setHueOffset] = useState(0);
-export const [hueSpeed, setHueSpeed] = useState(1);
+const [bandOffset, setBandOffset] = useState(0);
+const [bandSpeed, setBandSpeed] = useState(1);
+const [hueOffset, setHueOffset] = useState(0);
+const [hueSpeed, setHueSpeed] = useState(1);
 
-export const [animationSpeed, setAnimationSpeed] = useState(5);
+const [animationSpeed, setAnimationSpeed] = useState(5);
 let animatingColor = false;
 let prevFrameTime: number | null = null;
 
