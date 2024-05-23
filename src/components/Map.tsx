@@ -1,6 +1,6 @@
 import { View } from "ol";
 import { Extent } from "ol/extent";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
@@ -45,6 +45,8 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 
 export const MapComponent = () => {
   const {
+    fractalMap,
+    setFractalMap,
     animatingColor,
     setAnimatingColor,
     bandContrast,
@@ -55,6 +57,9 @@ export const MapComponent = () => {
     saturation,
     lightness,
   } = useAppContext();
+  const mapElement = useRef<Map | undefined>(undefined);
+  const mapRef = useRef<Map | undefined>(undefined);
+  mapRef.current = fractalMap;
 
   const zoom = 4;
   const center: Coordinate = [-1200000, 0];
@@ -93,6 +98,19 @@ export const MapComponent = () => {
       loader: loadTile,
     }),
   });
+
+  const map = new Map({
+    pixelRatio: window.devicePixelRatio,
+    maxTilesLoading: navigator.hardwareConcurrency,
+    target: "map",
+    controls: [],
+    layers: [layer],
+    view,
+  });
+
+  useEffect(() => {
+    return () => map.setTarget(undefined);
+  }, []);
 
   document.addEventListener("keydown", (event) => {
     switch (event.key) {
@@ -151,18 +169,11 @@ export const MapComponent = () => {
     layer.updateStyleVariables({ ["lightness"]: lightness });
   }, [lightness]);
 
-  useEffect(() => {
-    const map = new Map({
-      pixelRatio: window.devicePixelRatio,
-      maxTilesLoading: navigator.hardwareConcurrency,
-      target: "map",
-      controls: [],
-      layers: [layer],
-      view,
-    });
-
-    return () => map.setTarget(undefined);
-  }, []);
-
-  return <div id="map" style={{ width: "100%", height: "100%" }}></div>;
+  return (
+    <div
+      id="map"
+      style={{ height: "100vh", width: "100%" }}
+      className="map-container"
+    />
+  );
 };

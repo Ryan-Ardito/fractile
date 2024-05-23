@@ -1,3 +1,4 @@
+import { Map } from "ol";
 import React, {
   createContext,
   useState,
@@ -7,6 +8,8 @@ import React, {
 } from "react";
 
 interface AppContextType {
+  fractalMap: Map | undefined;
+  setFractalMap: React.Dispatch<React.SetStateAction<Map | undefined>>;
   bandOffset: number;
   setBandOffset: React.Dispatch<React.SetStateAction<number>>;
   bandSpeed: number;
@@ -40,6 +43,7 @@ interface AnimationProviderProps {
 }
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
+  const [fractalMap, setFractalMap] = useState<Map | undefined>(undefined);
   const [bandOffset, setBandOffset] = useState(0);
   const [bandSpeed, setBandSpeed] = useState(1);
   const [hueOffset, setHueOffset] = useState(0);
@@ -100,6 +104,8 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   return (
     <AppContext.Provider
       value={{
+        fractalMap,
+        setFractalMap,
         bandOffset,
         setBandOffset,
         bandSpeed,
