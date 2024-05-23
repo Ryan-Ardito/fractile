@@ -85,6 +85,7 @@ button {
 
 #animateButton {
   position: absolute;
+  background-color: rgba(0, 0, 0, 0.4);
   opacity: 60%;
   height: 1.8rem;
   right: 8px;
