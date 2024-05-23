@@ -3,6 +3,7 @@
 https://ryan-ardito.github.io/fractile/
 
 ## Controls
+Open the menu in the bottom left for more controls.
 
 ### Desktop
 
@@ -28,6 +29,6 @@ https://ryan-ardito.github.io/fractile/
 - Async front end
 - Parallel processing
 - Progressive rendering
-- Smooth animated HSL color
+- WebGL animated HSL colors
 - Dynamic max iteration scaling
 - Location data in URL for sharing
