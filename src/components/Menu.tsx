@@ -105,7 +105,7 @@ export const Menu = () => {
     },
     {
       id: "lightness",
-      label: "farts",
+      label: "lightness",
       min: 0,
       max: 2,
       step: 0.01,
@@ -132,7 +132,7 @@ export const Menu = () => {
           {controlValues.animatingColor ? "stop" : "animate"}
         </button>
         {controlInputs.map((inputRange, index) => (
-          <label>
+          <label key={index}>
             {inputRange.label}: {inputRange.value}
             <input
               type="range"
