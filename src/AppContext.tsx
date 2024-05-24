@@ -56,18 +56,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   });
   const fractalMap = useRef<Map | undefined>(undefined);
   const tileLayer = useRef<TileLayer | undefined>(undefined);
-  // const [bandOffset, setBandOffset] = useState(0);
-  // const [bandSpeed, setBandSpeed] = useState(1);
-  // const [hueOffset, setHueOffset] = useState(0);
-  // const [hueSpeed, setHueSpeed] = useState(1);
-  // const [animationSpeed, setAnimationSpeed] = useState(5);
-  // const [animatingColor, setAnimatingColor] = useState(false);
-  // const [paletteScale, setPaletteScale] = useState(5);
-  // const [bandSpacing, setBandSpacing] = useState(3);
-  // const [bandContrast, setBandContrast] = useState(0.28);
-  // const [bandHueSpeed, setBandHueSpeed] = useState(0.5);
-  // const [saturation, setSaturation] = useState(0.8);
-  // const [lightness, setLightness] = useState(1);
 
   const handleKey = (event: KeyboardEvent) => {
     const mapView = fractalMap.current?.getView();
