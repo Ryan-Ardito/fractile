@@ -1,135 +1,101 @@
 import { useState } from "react";
 import { useAppContext } from "../AppContext";
 
-interface MenuButtonProps {
-  menuCollapsed: boolean;
-  onClick: React.MouseEventHandler<HTMLButtonElement>;
-}
-
-const MenuButton = ({ menuCollapsed, onClick }: MenuButtonProps) => {
-  return (
-    <button id="menuButton" onClick={onClick}>
-      {menuCollapsed ? "menu" : "close"}
-    </button>
-  );
-};
-
 export const Menu = () => {
-  const {
-    animatingColor,
-    setAnimatingColor,
-    animationSpeed,
-    setAnimationSpeed,
-    bandContrast,
-    setBandContrast,
-    bandHueSpeed,
-    setBandHueSpeed,
-    bandOffset,
-    setBandOffset,
-    bandSpacing,
-    setBandSpacing,
-    paletteScale,
-    setPaletteScale,
-    hueOffset,
-    setHueOffset,
-    saturation,
-    setSaturation,
-    lightness,
-    setLightness,
-  } = useAppContext();
-
+  const { controlValues, setControlValues } = useAppContext();
   const [menuCollapsed, setMenuCollapsed] = useState(true);
+
+  const visibility = menuCollapsed ? "collapse" : "visible";
+  const opacity = menuCollapsed ? "0%" : "100%";
+  const buttonText = menuCollapsed ? "menu" : "close";
 
   const onMenuButtonClick = () => {
     setMenuCollapsed(!menuCollapsed);
   };
 
-  const visibility = menuCollapsed ? "collapse" : "visible";
-  const opacity = menuCollapsed ? "0%" : "100%";
+  const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = event.target;
+    setControlValues({
+      ...controlValues,
+      [id]: parseFloat(value),
+    });
+  };
 
   return (
     <>
-      <MenuButton menuCollapsed onClick={onMenuButtonClick} />
+      <button id="menuButton" onClick={onMenuButtonClick}>
+        {buttonText}
+      </button>
       <div id="floatingBox" style={{ visibility, opacity }}>
         <button
           id="animateButton"
-          onClick={() => setAnimatingColor(!animatingColor)}
+          onClick={() =>
+            setControlValues({
+              ...controlValues,
+              animatingColor: !controlValues.animatingColor,
+            })
+          }
         >
-          {animatingColor ? "stop" : "animate"}
+          {controlValues.animatingColor ? "stop" : "animate"}
         </button>
         <label>
-          animation speed:
-          <output>{animationSpeed}</output>
+          animation speed: <output>{controlValues.animationSpeed}</output>
           <input
             type="range"
             id="animationSpeed"
             min="1"
             max="10"
             step="0.1"
-            value={animationSpeed}
-            onChange={(e) => {
-              setAnimationSpeed(parseFloat(e.target.value));
-            }}
+            value={controlValues.animationSpeed}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          palette scale:
-          <output>{paletteScale}</output>
+          palette scale: <output>{controlValues.paletteScale}</output>
           <input
             type="range"
             id="paletteScale"
             min="1"
             max="10"
             step="0.01"
-            value={paletteScale}
-            onChange={(e) => {
-              setPaletteScale(parseFloat(e.target.value));
-            }}
+            value={controlValues.paletteScale}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          band spacing:
-          <output>{bandSpacing}</output>
+          band spacing: <output>{controlValues.bandSpacing}</output>
           <input
             type="range"
             id="bandSpacing"
             min="1"
             max="10"
             step="0.005"
-            value={bandSpacing}
-            onChange={(e) => {
-              setBandSpacing(parseFloat(e.target.value));
-            }}
+            value={controlValues.bandSpacing}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          band contrast:
-          <output>{bandContrast}</output>
+          band contrast: <output>{controlValues.bandContrast}</output>
           <input
             type="range"
             id="bandContrast"
             min="0"
             max="0.5"
             step="0.01"
-            value={bandContrast}
-            onChange={(e) => {
-              setBandContrast(parseFloat(e.target.value));
-            }}
+            value={controlValues.bandContrast}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          band offset:
-          <output>0</output>
+          band offset: <output>{controlValues.bandOffset}</output>
           <input
             type="range"
             id="bandOffset"
             min="-1"
             max="1"
             step="0.01"
-            value={bandOffset}
-            onChange={(e) => {
-              setBandOffset(parseFloat(e.target.value));
-            }}
+            value={controlValues.bandOffset}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
@@ -140,11 +106,9 @@ export const Menu = () => {
             min="0"
             max="1"
             step="0.01"
-            value={bandHueSpeed}
+            value={controlValues.bandHueSpeed}
             list="bandHueMarkers"
-            onChange={(e) => {
-              setBandHueSpeed(parseFloat(e.target.value));
-            }}
+            onChange={handleSliderChange}
           />
         </label>
         <datalist id="bandHueMarkers">
@@ -155,49 +119,40 @@ export const Menu = () => {
           <option value="1"></option>
         </datalist>
         <label>
-          hue:
-          <output>{hueOffset}</output>
+          hue: <output>{controlValues.hueOffset}</output>
           <input
             type="range"
             id="hueOffset"
             min="-180"
             max="179"
-            value={hueOffset}
-            onChange={(e) => {
-              setHueOffset(parseFloat(e.target.value));
-            }}
+            value={controlValues.hueOffset}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          saturation:
-          <output>{saturation}</output>
+          saturation: <output>{controlValues.saturation}</output>
           <input
             type="range"
             id="saturation"
             min="0"
             max="2"
             step="0.01"
-            value={saturation}
+            value={controlValues.saturation}
             list="oneMarker"
-            onChange={(e) => {
-              setSaturation(parseFloat(e.target.value));
-            }}
+            onChange={handleSliderChange}
           />
         </label>
         <label>
-          lightness:
-          <output>{lightness}</output>
+          lightness: <output>{controlValues.lightness}</output>
           <input
             type="range"
             id="lightness"
             min="0"
             max="2"
             step="0.01"
-            value={lightness}
+            value={controlValues.lightness}
             list="oneMarker"
-            onChange={(e) => {
-              setLightness(parseFloat(e.target.value));
-            }}
+            onChange={handleSliderChange}
           />
         </label>
         <datalist id="oneMarker">

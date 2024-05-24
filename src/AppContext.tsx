@@ -11,33 +11,26 @@ import React, {
 
 const BASE_NUDGE = 156543.03392804096;
 
+type ControlValues = {
+  bandOffset: number;
+  bandSpeed: number;
+  hueOffset: number;
+  hueSpeed: number;
+  animationSpeed: number;
+  animatingColor: boolean;
+  paletteScale: number;
+  bandSpacing: number;
+  bandContrast: number;
+  bandHueSpeed: number;
+  saturation: number;
+  lightness: number;
+};
+
 interface AppContextType {
   fractalMap: React.MutableRefObject<Map | undefined>;
   tileLayer: React.MutableRefObject<TileLayer | undefined>;
-  bandOffset: number;
-  setBandOffset: React.Dispatch<React.SetStateAction<number>>;
-  bandSpeed: number;
-  setBandSpeed: React.Dispatch<React.SetStateAction<number>>;
-  hueOffset: number;
-  setHueOffset: React.Dispatch<React.SetStateAction<number>>;
-  hueSpeed: number;
-  setHueSpeed: React.Dispatch<React.SetStateAction<number>>;
-  animationSpeed: number;
-  setAnimationSpeed: React.Dispatch<React.SetStateAction<number>>;
-  animatingColor: boolean;
-  setAnimatingColor: React.Dispatch<React.SetStateAction<boolean>>;
-  paletteScale: number;
-  setPaletteScale: React.Dispatch<React.SetStateAction<number>>;
-  bandSpacing: number;
-  setBandSpacing: React.Dispatch<React.SetStateAction<number>>;
-  bandContrast: number;
-  setBandContrast: React.Dispatch<React.SetStateAction<number>>;
-  bandHueSpeed: number;
-  setBandHueSpeed: React.Dispatch<React.SetStateAction<number>>;
-  saturation: number;
-  setSaturation: React.Dispatch<React.SetStateAction<number>>;
-  lightness: number;
-  setLightness: React.Dispatch<React.SetStateAction<number>>;
+  controlValues: ControlValues;
+  setControlValues: React.Dispatch<React.SetStateAction<ControlValues>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -47,106 +40,133 @@ interface AnimationProviderProps {
 }
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
+  const [controlValues, setControlValues] = useState({
+    bandOffset: 0,
+    bandSpeed: 1,
+    hueOffset: 0,
+    hueSpeed: 1,
+    animationSpeed: 5,
+    animatingColor: false,
+    paletteScale: 5,
+    bandSpacing: 3,
+    bandContrast: 0.28,
+    bandHueSpeed: 0.5,
+    saturation: 0.8,
+    lightness: 1,
+  });
   const fractalMap = useRef<Map | undefined>(undefined);
   const tileLayer = useRef<TileLayer | undefined>(undefined);
-  const [bandOffset, setBandOffset] = useState(0);
-  const [bandSpeed, setBandSpeed] = useState(1);
-  const [hueOffset, setHueOffset] = useState(0);
-  const [hueSpeed, setHueSpeed] = useState(1);
-  const [animationSpeed, setAnimationSpeed] = useState(5);
-  const [animatingColor, setAnimatingColor] = useState(false);
-  const [paletteScale, setPaletteScale] = useState(5);
-  const [bandSpacing, setBandSpacing] = useState(3);
-  const [bandContrast, setBandContrast] = useState(0.28);
-  const [bandHueSpeed, setBandHueSpeed] = useState(0.5);
-  const [saturation, setSaturation] = useState(0.8);
-  const [lightness, setLightness] = useState(1);
+  // const [bandOffset, setBandOffset] = useState(0);
+  // const [bandSpeed, setBandSpeed] = useState(1);
+  // const [hueOffset, setHueOffset] = useState(0);
+  // const [hueSpeed, setHueSpeed] = useState(1);
+  // const [animationSpeed, setAnimationSpeed] = useState(5);
+  // const [animatingColor, setAnimatingColor] = useState(false);
+  // const [paletteScale, setPaletteScale] = useState(5);
+  // const [bandSpacing, setBandSpacing] = useState(3);
+  // const [bandContrast, setBandContrast] = useState(0.28);
+  // const [bandHueSpeed, setBandHueSpeed] = useState(0.5);
+  // const [saturation, setSaturation] = useState(0.8);
+  // const [lightness, setLightness] = useState(1);
 
-  const mapView = fractalMap.current?.getView();
-  const zoom = mapView?.getZoom();
-  if (mapView && zoom) {
-    document.addEventListener("keydown", (event) => {
-      switch (event.key) {
-        case " ":
-          event.preventDefault();
-          if (animatingColor) {
-            setAnimatingColor(false);
-          } else {
-            setAnimatingColor(false);
-          }
-          break;
-        case "ArrowUp":
-          mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
-          break;
-        case "ArrowDown":
-          mapView.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
-          break;
-        case "ArrowRight":
-          mapView.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
-          break;
-        case "ArrowLeft":
-          mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
-          break;
-      }
-    });
-  }
+  const handleKey = (event: KeyboardEvent) => {
+    const mapView = fractalMap.current?.getView();
+    const zoom = mapView?.getZoom();
+
+    if (!mapView || !zoom) {
+      return;
+    }
+
+    switch (event.key) {
+      case " ":
+        event.preventDefault();
+        if (controlValues.animatingColor) {
+          setControlValues({ ...controlValues, animatingColor: false });
+        } else {
+          setControlValues({ ...controlValues, animatingColor: true });
+        }
+        break;
+      case "ArrowUp":
+        mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
+        break;
+      case "ArrowDown":
+        mapView.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
+        break;
+      case "ArrowRight":
+        mapView.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
+        break;
+      case "ArrowLeft":
+        mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
+        break;
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKey);
+  }, []);
 
   useEffect(() => {
     if (tileLayer.current) {
-      const adjPaletteScale = 2 ** (paletteScale - 5);
+      const adjPaletteScale = 2 ** (controlValues.paletteScale - 5);
       tileLayer.current.updateStyleVariables({
         ["paletteScale"]: adjPaletteScale,
       });
     }
-  }, [paletteScale]);
+  }, [controlValues.paletteScale]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      const adjBandSpacing = 2 ** bandSpacing;
+      const adjBandSpacing = 2 ** controlValues.bandSpacing;
       tileLayer.current.updateStyleVariables({
         ["bandSpacing"]: adjBandSpacing,
       });
     }
-  }, [bandSpacing]);
+  }, [controlValues.bandSpacing]);
 
   useEffect(() => {
     if (tileLayer.current) {
       tileLayer.current.updateStyleVariables({
-        ["bandContrast"]: bandContrast,
+        ["bandContrast"]: controlValues.bandContrast,
       });
       console.log("in useEffect");
     }
-  }, [bandContrast]);
+  }, [controlValues.bandContrast]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({ ["hueOffset"]: hueOffset });
+      tileLayer.current.updateStyleVariables({
+        ["hueOffset"]: controlValues.hueOffset,
+      });
     }
-  }, [hueOffset]);
+  }, [controlValues.hueOffset]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      const adjBandOffset = bandOffset * Math.PI;
+      const adjBandOffset = controlValues.bandOffset * Math.PI;
       tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
     }
-  }, [bandOffset]);
+  }, [controlValues.bandOffset]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({ ["saturation"]: saturation });
+      tileLayer.current.updateStyleVariables({
+        ["saturation"]: controlValues.saturation,
+      });
     }
-  }, [saturation]);
+  }, [controlValues.saturation]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({ ["lightness"]: lightness });
+      tileLayer.current.updateStyleVariables({
+        ["lightness"]: controlValues.lightness,
+      });
     }
-  }, [lightness]);
+  }, [controlValues.lightness]);
 
   let prevFrameTime: number | undefined = undefined;
 
   const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 1000 / 2 ** animationSpeed;
+    const frameDuration = 1000 / 2 ** controlValues.animationSpeed;
 
     if (!prevFrameTime) {
       prevFrameTime = timestamp;
@@ -155,21 +175,21 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     prevFrameTime = timestamp;
     const framesPassed = elapsed / frameDuration;
 
-    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
-    let newBandOffset = bandOffset + bandStep;
+    const bandStep = (Math.PI / 60) * controlValues.bandSpeed * framesPassed;
+    let newBandOffset = controlValues.bandOffset + bandStep;
     if (newBandOffset > Math.PI) {
       newBandOffset -= Math.PI * 2;
     }
-    setBandOffset(newBandOffset);
+    setControlValues({ ...controlValues, bandOffset: newBandOffset });
 
-    const hueStep = hueSpeed * framesPassed;
-    let newHueOffset = hueOffset - hueStep;
-    if (hueOffset < -180) {
+    const hueStep = controlValues.hueSpeed * framesPassed;
+    let newHueOffset = controlValues.hueOffset - hueStep;
+    if (controlValues.hueOffset < -180) {
       newHueOffset += 360;
     }
-    setHueOffset(newHueOffset);
+    setControlValues({ ...controlValues, hueOffset: newHueOffset });
 
-    if (animatingColor) {
+    if (controlValues.animatingColor) {
       requestAnimationFrame(animateColor);
     } else {
       prevFrameTime = undefined;
@@ -177,42 +197,20 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    if (animatingColor) {
+    if (controlValues.animatingColor) {
       requestAnimationFrame(animateColor);
     } else {
-      setAnimatingColor(false);
+      setControlValues({ ...controlValues, animatingColor: false });
     }
-  }, [animatingColor]);
+  }, [controlValues.animatingColor]);
 
   return (
     <AppContext.Provider
       value={{
         fractalMap,
         tileLayer,
-        bandOffset,
-        setBandOffset,
-        bandSpeed,
-        setBandSpeed,
-        hueOffset,
-        setHueOffset,
-        hueSpeed,
-        setHueSpeed,
-        animationSpeed,
-        setAnimationSpeed,
-        animatingColor,
-        setAnimatingColor,
-        paletteScale,
-        setPaletteScale,
-        bandSpacing,
-        setBandSpacing,
-        bandContrast,
-        setBandContrast,
-        bandHueSpeed,
-        setBandHueSpeed,
-        saturation,
-        setSaturation,
-        lightness,
-        setLightness,
+        controlValues,
+        setControlValues,
       }}
     >
       {children}
