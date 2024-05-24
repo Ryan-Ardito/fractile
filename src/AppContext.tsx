@@ -1,15 +1,19 @@
 import { Map } from "ol";
+import TileLayer from "ol/layer/WebGLTile";
 import React, {
   createContext,
   useState,
   useContext,
   ReactNode,
   useEffect,
+  useRef,
 } from "react";
 
+const BASE_NUDGE = 156543.03392804096;
+
 interface AppContextType {
-  fractalMap: Map | undefined;
-  setFractalMap: React.Dispatch<React.SetStateAction<Map | undefined>>;
+  fractalMap: React.MutableRefObject<Map | undefined>;
+  tileLayer: React.MutableRefObject<TileLayer | undefined>;
   bandOffset: number;
   setBandOffset: React.Dispatch<React.SetStateAction<number>>;
   bandSpeed: number;
@@ -43,7 +47,8 @@ interface AnimationProviderProps {
 }
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
-  const [fractalMap, setFractalMap] = useState<Map | undefined>(undefined);
+  const fractalMap = useRef<Map | undefined>(undefined);
+  const tileLayer = useRef<TileLayer | undefined>(undefined);
   const [bandOffset, setBandOffset] = useState(0);
   const [bandSpeed, setBandSpeed] = useState(1);
   const [hueOffset, setHueOffset] = useState(0);
@@ -57,6 +62,87 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const [saturation, setSaturation] = useState(0.8);
   const [lightness, setLightness] = useState(1);
 
+  const mapView = fractalMap.current?.getView();
+  const zoom = mapView?.getZoom();
+  if (mapView && zoom) {
+    document.addEventListener("keydown", (event) => {
+      switch (event.key) {
+        case " ":
+          event.preventDefault();
+          if (animatingColor) {
+            setAnimatingColor(false);
+          } else {
+            setAnimatingColor(false);
+          }
+          break;
+        case "ArrowUp":
+          mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
+          break;
+        case "ArrowDown":
+          mapView.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
+          break;
+        case "ArrowRight":
+          mapView.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
+          break;
+        case "ArrowLeft":
+          mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
+          break;
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjPaletteScale = 2 ** (paletteScale - 5);
+      tileLayer.current.updateStyleVariables({
+        ["paletteScale"]: adjPaletteScale,
+      });
+    }
+  }, [paletteScale]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjBandSpacing = 2 ** bandSpacing;
+      tileLayer.current.updateStyleVariables({
+        ["bandSpacing"]: adjBandSpacing,
+      });
+    }
+  }, [bandSpacing]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({
+        ["bandContrast"]: bandContrast,
+      });
+      console.log("in useEffect");
+    }
+  }, [bandContrast]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({ ["hueOffset"]: hueOffset });
+    }
+  }, [hueOffset]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjBandOffset = bandOffset * Math.PI;
+      tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
+    }
+  }, [bandOffset]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({ ["saturation"]: saturation });
+    }
+  }, [saturation]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({ ["lightness"]: lightness });
+    }
+  }, [lightness]);
+
   let prevFrameTime: number | undefined = undefined;
 
   const animateColor: FrameRequestCallback = (timestamp) => {
@@ -65,7 +151,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     if (!prevFrameTime) {
       prevFrameTime = timestamp;
     }
-    if (!prevFrameTime) throw "oops";
     const elapsed = timestamp - prevFrameTime;
     prevFrameTime = timestamp;
     const framesPassed = elapsed / frameDuration;
@@ -92,12 +177,10 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    setAnimatingColor(false);
-  }, [hueOffset, bandOffset]);
-
-  useEffect(() => {
     if (animatingColor) {
       requestAnimationFrame(animateColor);
+    } else {
+      setAnimatingColor(false);
     }
   }, [animatingColor]);
 
@@ -105,7 +188,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     <AppContext.Provider
       value={{
         fractalMap,
-        setFractalMap,
+        tileLayer,
         bandOffset,
         setBandOffset,
         bandSpeed,
@@ -140,7 +223,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 export const useAppContext = (): AppContextType => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error("useAnimation must be used within an AnimationProvider");
+    throw new Error("useAppContext must be used within an AppContextProvider");
   }
   return context;
 };
