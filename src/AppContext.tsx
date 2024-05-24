@@ -68,11 +68,10 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     switch (event.key) {
       case " ":
         event.preventDefault();
-        if (controlValues.animatingColor) {
-          setControlValues({ ...controlValues, animatingColor: false });
-        } else {
-          setControlValues({ ...controlValues, animatingColor: true });
-        }
+        setControlValues({
+          ...controlValues,
+          animatingColor: !controlValues.animatingColor,
+        });
         break;
       case "ArrowUp":
         mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
@@ -151,16 +150,16 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     }
   }, [controlValues.lightness]);
 
-  let prevFrameTime: number | undefined = undefined;
+  const prevFrameTime = useRef<number | undefined>(undefined);
 
   const animateColor: FrameRequestCallback = (timestamp) => {
     const frameDuration = 1000 / 2 ** controlValues.animationSpeed;
 
-    if (!prevFrameTime) {
-      prevFrameTime = timestamp;
+    if (!prevFrameTime.current) {
+      prevFrameTime.current = timestamp;
     }
-    const elapsed = timestamp - prevFrameTime;
-    prevFrameTime = timestamp;
+    const elapsed = timestamp - prevFrameTime.current;
+    prevFrameTime.current = timestamp;
     const framesPassed = elapsed / frameDuration;
 
     const bandStep = (Math.PI / 60) * controlValues.bandSpeed * framesPassed;
@@ -180,15 +179,13 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     if (controlValues.animatingColor) {
       requestAnimationFrame(animateColor);
     } else {
-      prevFrameTime = undefined;
+      prevFrameTime.current = undefined;
     }
   };
 
   useEffect(() => {
     if (controlValues.animatingColor) {
       requestAnimationFrame(animateColor);
-    } else {
-      setControlValues({ ...controlValues, animatingColor: false });
     }
   }, [controlValues.animatingColor]);
 
