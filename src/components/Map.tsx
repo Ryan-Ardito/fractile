@@ -1,6 +1,6 @@
 import { View } from "ol";
 import { Extent } from "ol/extent";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
@@ -43,63 +43,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 };
 
 export const MapComponent = () => {
-  const { fractalMap, tileLayer, controlValues, setControlValues } =
-    useAppContext();
-
-  const prevFrameTime = useRef<number | undefined>(undefined);
-  const controlValuesRef = useRef(controlValues);
-
-  useEffect(() => {
-    controlValuesRef.current = controlValues;
-  }, [controlValues]);
-
-  const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 1000 / 2 ** controlValuesRef.current.animationSpeed;
-
-    if (!prevFrameTime.current) {
-      prevFrameTime.current = timestamp;
-    }
-    const elapsed = timestamp - prevFrameTime.current;
-    prevFrameTime.current = timestamp;
-    const framesPassed = elapsed / frameDuration;
-
-    const bandStep =
-      (Math.PI / 60) * controlValuesRef.current.bandSpeed * framesPassed;
-    let newBandOffset =
-      controlValuesRef.current.bandOffset * Math.PI + bandStep;
-    if (newBandOffset > Math.PI) {
-      newBandOffset -= Math.PI * 2;
-    }
-    setControlValues({
-      ...controlValuesRef.current,
-      bandOffset: newBandOffset / Math.PI,
-    });
-
-    const hueStep = controlValuesRef.current.hueSpeed * framesPassed;
-    let newHueOffset = controlValuesRef.current.hueOffset - hueStep;
-    if (controlValuesRef.current.hueOffset < -180) {
-      newHueOffset += 360;
-    }
-    setControlValues({ ...controlValuesRef.current, hueOffset: newHueOffset });
-
-    if (controlValuesRef.current.animatingColor) {
-      requestAnimationFrame(animateColor);
-    } else {
-      prevFrameTime.current = undefined;
-    }
-  };
-
-  useEffect(() => {
-    if (controlValues.animatingColor) {
-      requestAnimationFrame(animateColor);
-    }
-    return () => {
-      if (prevFrameTime.current !== undefined) {
-        cancelAnimationFrame(prevFrameTime.current);
-        prevFrameTime.current = undefined;
-      }
-    };
-  }, [controlValues.animatingColor]);
+  const { fractalMap, tileLayer } = useAppContext();
 
   useEffect(() => {
     const zoom = 4;

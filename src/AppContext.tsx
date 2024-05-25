@@ -5,7 +5,6 @@ import React, {
   useState,
   useContext,
   ReactNode,
-  useEffect,
   useRef,
 } from "react";
 
@@ -54,64 +53,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   });
   const fractalMap = useRef<Map | undefined>(undefined);
   const tileLayer = useRef<TileLayer | undefined>(undefined);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjPaletteScale = 2 ** (controlValues.paletteScale - 5);
-      tileLayer.current.updateStyleVariables({
-        ["paletteScale"]: adjPaletteScale,
-      });
-    }
-  }, [controlValues.paletteScale]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandSpacing = 2 ** controlValues.bandSpacing;
-      tileLayer.current.updateStyleVariables({
-        ["bandSpacing"]: adjBandSpacing,
-      });
-    }
-  }, [controlValues.bandSpacing]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["bandContrast"]: controlValues.bandContrast,
-      });
-      console.log("in useEffect");
-    }
-  }, [controlValues.bandContrast]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["hueOffset"]: controlValues.hueOffset,
-      });
-    }
-  }, [controlValues.hueOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandOffset = controlValues.bandOffset * Math.PI;
-      tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
-    }
-  }, [controlValues.bandOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["saturation"]: controlValues.saturation,
-      });
-    }
-  }, [controlValues.saturation]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["lightness"]: controlValues.lightness,
-      });
-    }
-  }, [controlValues.lightness]);
 
   return (
     <AppContext.Provider
