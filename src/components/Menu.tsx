@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useAppContext } from "../AppContext";
 
 export const Menu = () => {
   const { controlValues, setControlValues } = useAppContext();
-  const [menuCollapsed, setMenuCollapsed] = useState(true);
+  const menuCollapsed = controlValues.menuCollapsed;
 
   const visibility = menuCollapsed ? "collapse" : "visible";
   const opacity = menuCollapsed ? "0%" : "100%";
@@ -11,7 +11,7 @@ export const Menu = () => {
   const animateButtonText = controlValues.animatingColor ? "stop" : "animate";
 
   const onMenuButtonClick = () => {
-    setMenuCollapsed(!menuCollapsed);
+    setControlValues({ ...controlValues, menuCollapsed: !menuCollapsed });
   };
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {

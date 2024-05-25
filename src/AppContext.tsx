@@ -9,10 +9,11 @@ import React, {
 } from "react";
 
 type ControlValues = {
+  animatingColor: boolean;
+  menuCollapsed: boolean;
   bandOffset: number;
   hueOffset: number;
   animationSpeed: number;
-  animatingColor: boolean;
   paletteScale: number;
   bandSpacing: number;
   bandContrast: number;
@@ -36,10 +37,11 @@ interface AnimationProviderProps {
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const [controlValues, setControlValues] = useState({
+    animatingColor: false,
+    menuCollapsed: true,
     bandOffset: 0,
     hueOffset: 0,
     animationSpeed: 5,
-    animatingColor: false,
     paletteScale: 5,
     bandSpacing: 3,
     bandContrast: 0.28,

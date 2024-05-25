@@ -28,11 +28,11 @@ function App() {
     prevFrameTime.current = timestamp;
     const framesPassed = elapsed / frameDuration;
 
-    const bandSpeed = Math.min(1, (1 - controlValuesRef.current.bandHueSpeed) * 2);
-    const bandStep =
-      (Math.PI / 60) *
-      bandSpeed *
-      framesPassed;
+    const bandSpeed = Math.min(
+      1,
+      (1 - controlValuesRef.current.bandHueSpeed) * 2
+    );
+    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
     let newBandOffset =
       controlValuesRef.current.bandOffset * Math.PI + bandStep;
     if (newBandOffset > Math.PI) {
@@ -41,9 +41,7 @@ function App() {
 
     const hueSpeed = Math.min(1, controlValuesRef.current.bandHueSpeed * 2);
     const hueStep = hueSpeed * framesPassed;
-    let newHueOffset =
-      controlValuesRef.current.hueOffset -
-      hueStep;
+    let newHueOffset = controlValuesRef.current.hueOffset - hueStep;
     if (controlValuesRef.current.hueOffset < -180) {
       newHueOffset += 360;
     }
@@ -75,25 +73,16 @@ function App() {
   }, [controlValues.animatingColor]);
 
   useEffect(() => {
-    console.log("in key handler useEffect");
+    console.log("in arrow key handler useEffect");
     const handleKey = (event: KeyboardEvent) => {
       const mapView = fractalMap.current?.getView();
       const zoom = mapView?.getZoom();
+      const menuCollapsed = controlValues.menuCollapsed;
 
-      if (!mapView || !zoom) {
+      if (!mapView || !zoom || !menuCollapsed) {
         return;
       }
-
       switch (event.key) {
-        case " ":
-          event.preventDefault();
-          setControlValues((vals) => {
-            return {
-              ...vals,
-              animatingColor: !vals.animatingColor,
-            };
-          });
-          break;
         case "ArrowUp":
           mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
           break;
@@ -106,6 +95,29 @@ function App() {
         case "ArrowLeft":
           mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
           break;
+      }
+    };
+
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [controlValues.menuCollapsed]);
+
+  useEffect(() => {
+    console.log("in key handler useEffect");
+    const handleKey = (event: KeyboardEvent) => {
+      const mapView = fractalMap.current?.getView();
+      const zoom = mapView?.getZoom();
+
+      if (event.key === " " && mapView && zoom) {
+        event.preventDefault();
+        setControlValues((vals) => {
+          return {
+            ...vals,
+            animatingColor: !vals.animatingColor,
+          };
+        });
       }
     };
 
