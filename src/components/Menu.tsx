@@ -16,6 +16,7 @@ export const Menu = () => {
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = event.target;
+
     const bandHueSpeed = controlValues.bandHueSpeed;
     let animatingColor = controlValues.animatingColor;
     if (

@@ -12,7 +12,19 @@ const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
 const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
 
-const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
+export const locationFromHash = (hash: string): [number, Coordinate] => {
+  const trim_hash = hash.replace("#map=", "");
+  const parts = trim_hash.split("/");
+  if (parts.length === 3) {
+    const zoom = parseFloat(parts[0]);
+    const center: Coordinate = [parseFloat(parts[1]), parseFloat(parts[2])];
+    return [zoom, center];
+  } else {
+    throw new Error("invalid location hash");
+  }
+};
+
+const loadTile = (z: number, x: number, y: number): Promise<Float32Array> => {
   return new Promise((resolve, reject) => {
     // hacky black real line fix
     z += 1e-9;
@@ -102,10 +114,14 @@ export const MapComponent = () => {
     }
   }, [controlValues.lightness]);
 
-
   useEffect(() => {
-    const zoom = 4;
-    const center: Coordinate = [-1200000, 0];
+    let zoom = 4;
+    let center: Coordinate = [-1200000, 0];
+    if (window.location.hash) {
+      try {
+        [zoom, center] = locationFromHash(window.location.hash);
+      } catch {}
+    }
 
     const view = new View({
       multiWorld: true,

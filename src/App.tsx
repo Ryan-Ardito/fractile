@@ -1,6 +1,6 @@
 import { Menu } from "./components/Menu";
 import { AboutInfo } from "./components/AboutInfo";
-import { MapComponent } from "./components/Map";
+import { MapComponent, locationFromHash } from "./components/Map";
 import { useAppContext } from "./AppContext";
 import { useEffect, useRef } from "react";
 
@@ -132,14 +132,56 @@ function App() {
     };
   }, [controlValues.menuCollapsed]);
 
-  // document.addEventListener("DOMContentLoaded", () => {
-  //   document.addEventListener("keydown", (event) => {
-
-  //     if (event.key === "Escape" || event.key === "Esc") {
-  //     }
-  //   });
-  // });
+  const shouldUpdate = useRef(false);
   useEffect(() => {
+    const mapView = fractalMap.current?.getView();
+    const updatePermalink = () => {
+      if (!shouldUpdate.current) {
+        shouldUpdate.current = true;
+        return;
+      }
+
+      const center = mapView?.getCenter();
+      const zoom = mapView?.getZoom();
+      if (!center || !mapView || !zoom) {
+        return;
+      }
+
+      const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
+      const state = {
+        zoom: mapView.getZoom(),
+        center: mapView.getCenter(),
+      };
+
+      window.history.replaceState(state, "map", hash);
+    };
+
+    const handleHashChange = (e: HashChangeEvent) => {
+      if (!mapView) return;
+      try {
+        const url = e.newURL;
+        const hash = url.substring(url.indexOf("#"));
+        const [zoom, center] = locationFromHash(hash);
+        mapView.setZoom(zoom);
+        mapView.setCenter(center);
+        const state = {
+          zoom: mapView.getZoom(),
+          center: mapView.getCenter(),
+        };
+
+        window.history.replaceState(state, "map", hash);
+      } catch {}
+    };
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state === null || !mapView) {
+        return;
+      }
+      mapView.setCenter(e.state.center);
+      mapView.setZoom(e.state.zoom);
+      shouldUpdate.current = false;
+    };
+
     const handleKey = (event: KeyboardEvent) => {
       switch (event.key) {
         case " ":
@@ -159,8 +201,21 @@ function App() {
       }
     };
 
+    if (window.location.hash && mapView) {
+      try {
+        const [zoom, center] = locationFromHash(window.location.hash);
+        mapView.setZoom(zoom);
+        mapView.setCenter(center);
+      } catch {}
+    }
+
+    fractalMap.current?.on("moveend", updatePermalink);
+    window.onpopstate = handlePopState;
+    window.addEventListener("hashchange", handleHashChange);
     document.addEventListener("keydown", handleKey);
     return () => {
+      window.onpopstate = null;
+      window.removeEventListener("hashchange", handleHashChange);
       document.removeEventListener("keydown", handleKey);
     };
   }, []);
