@@ -28,15 +28,19 @@ function App() {
     prevFrameTime.current = timestamp;
     const framesPassed = elapsed / frameDuration;
 
-    const bandStep =
-      (Math.PI / 60) * controlValuesRef.current.bandSpeed * framesPassed;
+    const bandSpeed = Math.min(
+      1,
+      (1 - controlValuesRef.current.bandHueSpeed) * 2
+    );
+    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
     let newBandOffset =
       controlValuesRef.current.bandOffset * Math.PI + bandStep;
     if (newBandOffset > Math.PI) {
       newBandOffset -= Math.PI * 2;
     }
 
-    const hueStep = controlValuesRef.current.hueSpeed * framesPassed;
+    const hueSpeed = Math.min(1, controlValuesRef.current.bandHueSpeed * 2);
+    const hueStep = hueSpeed * framesPassed;
     let newHueOffset = controlValuesRef.current.hueOffset - hueStep;
     if (controlValuesRef.current.hueOffset < -180) {
       newHueOffset += 360;

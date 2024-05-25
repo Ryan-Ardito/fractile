@@ -10,9 +10,7 @@ import React, {
 
 type ControlValues = {
   bandOffset: number;
-  bandSpeed: number;
   hueOffset: number;
-  hueSpeed: number;
   animationSpeed: number;
   animatingColor: boolean;
   paletteScale: number;
@@ -39,9 +37,7 @@ interface AnimationProviderProps {
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const [controlValues, setControlValues] = useState({
     bandOffset: 0,
-    bandSpeed: 1,
     hueOffset: 0,
-    hueSpeed: 1,
     animationSpeed: 5,
     animatingColor: false,
     paletteScale: 5,
