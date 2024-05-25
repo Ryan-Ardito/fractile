@@ -34,17 +34,17 @@ function App() {
     if (newBandOffset > Math.PI) {
       newBandOffset -= Math.PI * 2;
     }
-    setControlValues({
-      ...controlValuesRef.current,
-      bandOffset: newBandOffset / Math.PI,
-    });
 
     const hueStep = controlValuesRef.current.hueSpeed * framesPassed;
     let newHueOffset = controlValuesRef.current.hueOffset - hueStep;
     if (controlValuesRef.current.hueOffset < -180) {
       newHueOffset += 360;
     }
-    setControlValues({ ...controlValuesRef.current, hueOffset: newHueOffset });
+    setControlValues({
+      ...controlValuesRef.current,
+      bandOffset: newBandOffset / Math.PI,
+      hueOffset: newHueOffset,
+    });
 
     if (controlValuesRef.current.animatingColor) {
       requestAnimationFrame(animateColor);
