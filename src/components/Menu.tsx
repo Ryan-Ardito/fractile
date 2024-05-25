@@ -78,7 +78,7 @@ export const Menu = () => {
       min: "-1",
       max: "1",
       step: "0.01",
-      value: controlValues.bandOffset,
+      value: controlValues.bandOffset.toFixed(2),
     },
     {
       id: "bandHueSpeed",
@@ -95,7 +95,7 @@ export const Menu = () => {
       min: "-180",
       max: "179",
       step: "1",
-      value: controlValues.hueOffset,
+      value: controlValues.hueOffset.toFixed(0),
     },
     {
       id: "saturation",
