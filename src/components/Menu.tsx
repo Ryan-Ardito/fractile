@@ -16,9 +16,19 @@ export const Menu = () => {
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = event.target;
+    const bandHueSpeed = controlValues.bandHueSpeed;
+    let animatingColor = controlValues.animatingColor;
+    if (
+      (id === "hueOffset" && bandHueSpeed != 0) ||
+      (id === "bandOffset" && bandHueSpeed != 1)
+    ) {
+      animatingColor = false;
+    }
+
     setControlValues((vals) => {
       return {
         ...vals,
+        animatingColor,
         [id]: parseFloat(value),
       };
     });
@@ -75,10 +85,11 @@ export const Menu = () => {
     {
       id: "bandOffset",
       label: "band offset",
+      displayVal: controlValues.bandOffset.toFixed(2),
       min: "-1",
       max: "1",
       step: "0.01",
-      value: controlValues.bandOffset.toFixed(2),
+      value: controlValues.bandOffset,
     },
     {
       id: "bandHueSpeed",
@@ -92,10 +103,11 @@ export const Menu = () => {
     {
       id: "hueOffset",
       label: "hue offset",
+      displayVal: controlValues.hueOffset.toFixed(0),
       min: "-180",
       max: "179",
       step: "1",
-      value: controlValues.hueOffset.toFixed(0),
+      value: controlValues.hueOffset,
     },
     {
       id: "saturation",
@@ -138,7 +150,7 @@ export const Menu = () => {
         </button>
         {controlInputs.map((inputRange, index) => (
           <label key={index}>
-            {inputRange.label}: {inputRange.value}
+            {inputRange.label}: {inputRange.displayVal || inputRange.value}
             <input
               type="range"
               id={inputRange.id}
