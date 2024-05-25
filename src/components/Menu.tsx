@@ -123,9 +123,11 @@ export const Menu = () => {
         <button
           id="animateButton"
           onClick={() =>
-            setControlValues({
-              ...controlValues,
-              animatingColor: !controlValues.animatingColor,
+            setControlValues((vals) => {
+              return {
+                ...vals,
+                animatingColor: !vals.animatingColor,
+              };
             })
           }
         >

@@ -9,8 +9,6 @@ import React, {
   useRef,
 } from "react";
 
-const BASE_NUDGE = 156543.03392804096;
-
 type ControlValues = {
   bandOffset: number;
   bandSpeed: number;
@@ -56,41 +54,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   });
   const fractalMap = useRef<Map | undefined>(undefined);
   const tileLayer = useRef<TileLayer | undefined>(undefined);
-
-  const handleKey = (event: KeyboardEvent) => {
-    const mapView = fractalMap.current?.getView();
-    const zoom = mapView?.getZoom();
-
-    if (!mapView || !zoom) {
-      return;
-    }
-
-    switch (event.key) {
-      case " ":
-        event.preventDefault();
-        setControlValues({
-          ...controlValues,
-          animatingColor: !controlValues.animatingColor,
-        });
-        break;
-      case "ArrowUp":
-        mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
-        break;
-      case "ArrowDown":
-        mapView.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
-        break;
-      case "ArrowRight":
-        mapView.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
-        break;
-      case "ArrowLeft":
-        mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
-        break;
-    }
-  };
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKey);
-  }, []);
 
   useEffect(() => {
     if (tileLayer.current) {
@@ -149,45 +112,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
       });
     }
   }, [controlValues.lightness]);
-
-  const prevFrameTime = useRef<number | undefined>(undefined);
-
-  const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 1000 / 2 ** controlValues.animationSpeed;
-
-    if (!prevFrameTime.current) {
-      prevFrameTime.current = timestamp;
-    }
-    const elapsed = timestamp - prevFrameTime.current;
-    prevFrameTime.current = timestamp;
-    const framesPassed = elapsed / frameDuration;
-
-    const bandStep = (Math.PI / 60) * controlValues.bandSpeed * framesPassed;
-    let newBandOffset = controlValues.bandOffset + bandStep;
-    if (newBandOffset > Math.PI) {
-      newBandOffset -= Math.PI * 2;
-    }
-    setControlValues({ ...controlValues, bandOffset: newBandOffset });
-
-    const hueStep = controlValues.hueSpeed * framesPassed;
-    let newHueOffset = controlValues.hueOffset - hueStep;
-    if (controlValues.hueOffset < -180) {
-      newHueOffset += 360;
-    }
-    setControlValues({ ...controlValues, hueOffset: newHueOffset });
-
-    if (controlValues.animatingColor) {
-      requestAnimationFrame(animateColor);
-    } else {
-      prevFrameTime.current = undefined;
-    }
-  };
-
-  useEffect(() => {
-    if (controlValues.animatingColor) {
-      requestAnimationFrame(animateColor);
-    }
-  }, [controlValues.animatingColor]);
 
   return (
     <AppContext.Provider
