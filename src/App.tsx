@@ -11,7 +11,7 @@ function App() {
     useAppContext();
 
   const prevFrameTime = useRef<number | undefined>(undefined);
-  const prevFrameRef = useRef<number | undefined>(undefined);
+  const frameId = useRef<number | undefined>(undefined);
   const controlValuesRef = useRef(controlValues);
 
   useEffect(() => {
@@ -20,31 +20,30 @@ function App() {
 
   const animateColor: FrameRequestCallback = (timestamp) => {
     const frameDuration = 1000 / 2 ** controlValuesRef.current.animationSpeed;
-
     if (!prevFrameTime.current) {
       prevFrameTime.current = timestamp;
     }
     const elapsed = timestamp - prevFrameTime.current;
     prevFrameTime.current = timestamp;
     const framesPassed = elapsed / frameDuration;
+    const bandHueSpeed = controlValuesRef.current.bandHueSpeed;
 
-    const bandSpeed = Math.min(
-      1,
-      (1 - controlValuesRef.current.bandHueSpeed) * 2
-    );
+    const bandSpeed = Math.min(1, (1 - bandHueSpeed) * 2);
     const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
-    let newBandOffset =
-      controlValuesRef.current.bandOffset * Math.PI + bandStep;
+    const bandOffset = controlValuesRef.current.bandOffset * Math.PI;
+    let newBandOffset = bandOffset + bandStep;
     if (newBandOffset > Math.PI) {
       newBandOffset -= Math.PI * 2;
     }
 
-    const hueSpeed = Math.min(1, controlValuesRef.current.bandHueSpeed * 2);
+    const hueSpeed = Math.min(1, bandHueSpeed * 2);
     const hueStep = hueSpeed * framesPassed;
-    let newHueOffset = controlValuesRef.current.hueOffset - hueStep;
+    const hueOffset = controlValuesRef.current.hueOffset;
+    let newHueOffset = hueOffset - hueStep;
     if (controlValuesRef.current.hueOffset < -180) {
       newHueOffset += 360;
     }
+
     setControlValues({
       ...controlValuesRef.current,
       bandOffset: newBandOffset / Math.PI,
@@ -52,22 +51,22 @@ function App() {
     });
 
     if (controlValuesRef.current.animatingColor) {
-      prevFrameRef.current = requestAnimationFrame(animateColor);
+      frameId.current = requestAnimationFrame(animateColor);
     } else {
       prevFrameTime.current = undefined;
-      prevFrameRef.current = undefined;
+      frameId.current = undefined;
     }
   };
 
   useEffect(() => {
     if (controlValues.animatingColor) {
-      prevFrameRef.current = requestAnimationFrame(animateColor);
+      frameId.current = requestAnimationFrame(animateColor);
     }
     return () => {
-      if (prevFrameRef.current) {
-        cancelAnimationFrame(prevFrameRef.current);
+      if (frameId.current) {
+        cancelAnimationFrame(frameId.current);
         prevFrameTime.current = undefined;
-        prevFrameRef.current = undefined;
+        frameId.current = undefined;
       }
     };
   }, [controlValues.animatingColor]);
