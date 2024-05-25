@@ -63,12 +63,13 @@ function App() {
       if (prevFrameRef.current) {
         cancelAnimationFrame(prevFrameRef.current);
         prevFrameTime.current = undefined;
-      prevFrameRef.current = undefined;
+        prevFrameRef.current = undefined;
       }
     };
   }, [controlValues.animatingColor]);
 
   useEffect(() => {
+    console.log("in key handler useEffect");
     const handleKey = (event: KeyboardEvent) => {
       const mapView = fractalMap.current?.getView();
       const zoom = mapView?.getZoom();
@@ -103,6 +104,9 @@ function App() {
     };
 
     document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+    };
   }, []);
 
   useEffect(() => {
@@ -128,13 +132,11 @@ function App() {
       tileLayer.current.updateStyleVariables({
         ["bandContrast"]: controlValues.bandContrast,
       });
-      console.log("in useEffect");
     }
   }, [controlValues.bandContrast]);
 
   useEffect(() => {
     if (tileLayer.current) {
-      console.log("in hueOffset useEffect");
       tileLayer.current.updateStyleVariables({
         ["hueOffset"]: controlValues.hueOffset,
       });
@@ -144,7 +146,6 @@ function App() {
   useEffect(() => {
     if (tileLayer.current) {
       const adjBandOffset = controlValues.bandOffset * Math.PI;
-      console.log("in bandOffset useEffect");
       tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
     }
   }, [controlValues.bandOffset]);
