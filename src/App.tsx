@@ -11,6 +11,7 @@ function App() {
     useAppContext();
 
   const prevFrameTime = useRef<number | undefined>(undefined);
+  const prevFrameRef = useRef<number | undefined>(undefined);
   const controlValuesRef = useRef(controlValues);
 
   useEffect(() => {
@@ -47,20 +48,22 @@ function App() {
     });
 
     if (controlValuesRef.current.animatingColor) {
-      requestAnimationFrame(animateColor);
+      prevFrameRef.current = requestAnimationFrame(animateColor);
     } else {
       prevFrameTime.current = undefined;
+      prevFrameRef.current = undefined;
     }
   };
 
   useEffect(() => {
     if (controlValues.animatingColor) {
-      requestAnimationFrame(animateColor);
+      prevFrameRef.current = requestAnimationFrame(animateColor);
     }
     return () => {
-      if (prevFrameTime.current !== undefined) {
-        cancelAnimationFrame(prevFrameTime.current);
+      if (prevFrameRef.current) {
+        cancelAnimationFrame(prevFrameRef.current);
         prevFrameTime.current = undefined;
+      prevFrameRef.current = undefined;
       }
     };
   }, [controlValues.animatingColor]);
