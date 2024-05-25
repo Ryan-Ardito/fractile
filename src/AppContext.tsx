@@ -36,6 +36,8 @@ interface AnimationProviderProps {
 }
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
+  const fractalMap = useRef<Map | undefined>(undefined);
+  const tileLayer = useRef<TileLayer | undefined>(undefined);
   const [controlValues, setControlValues] = useState({
     animatingColor: false,
     menuCollapsed: true,
@@ -49,8 +51,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     saturation: 0.8,
     lightness: 1,
   });
-  const fractalMap = useRef<Map | undefined>(undefined);
-  const tileLayer = useRef<TileLayer | undefined>(undefined);
 
   return (
     <AppContext.Provider

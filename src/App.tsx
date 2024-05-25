@@ -5,13 +5,44 @@ import { useAppContext } from "./AppContext";
 import { useEffect, useRef } from "react";
 
 const BASE_NUDGE = 156543.03392804096;
+const MOUSE_HIDE_DELAY = 1000;
 
 function App() {
   const { fractalMap, controlValues, setControlValues } = useAppContext();
 
-  const prevFrameTime = useRef<number | undefined>(undefined);
-  const frameId = useRef<number | undefined>(undefined);
+  const prevFrameTime = useRef<number | undefined>();
+  const frameId = useRef<number | undefined>();
   const controlValuesRef = useRef(controlValues);
+
+  const timeout = useRef<number | undefined>();
+
+  useEffect(() => {
+    const hideMouseCursor = () => {
+      if (document.body.style.cursor !== "none") {
+        document.body.style.cursor = "none";
+      }
+    };
+
+    const showMouseCursor = () => {
+      clearTimeout(timeout.current);
+      if (document.body.style.cursor !== "default") {
+        document.body.style.cursor = "default";
+      }
+    };
+
+    const handleWakeUp = () => {
+      showMouseCursor();
+      timeout.current = setTimeout(hideMouseCursor, MOUSE_HIDE_DELAY);
+    };
+
+    document.addEventListener("mousemove", handleWakeUp);
+    document.addEventListener("mousedown", handleWakeUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleWakeUp);
+      document.removeEventListener("mousedown", handleWakeUp);
+    };
+  }, []);
 
   useEffect(() => {
     controlValuesRef.current = controlValues;
@@ -101,16 +132,30 @@ function App() {
     };
   }, [controlValues.menuCollapsed]);
 
+  // document.addEventListener("DOMContentLoaded", () => {
+  //   document.addEventListener("keydown", (event) => {
+
+  //     if (event.key === "Escape" || event.key === "Esc") {
+  //     }
+  //   });
+  // });
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === " ") {
-        event.preventDefault();
-        setControlValues((vals) => {
-          return {
-            ...vals,
-            animatingColor: !vals.animatingColor,
-          };
-        });
+      switch (event.key) {
+        case " ":
+          event.preventDefault();
+          setControlValues((vals) => {
+            return {
+              ...vals,
+              animatingColor: !vals.animatingColor,
+            };
+          });
+          break;
+
+        case "Escape":
+          setControlValues((vals) => {
+            return { ...vals, menuCollapsed: true };
+          });
       }
     };
 
