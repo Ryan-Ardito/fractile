@@ -16,9 +16,11 @@ export const Menu = () => {
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = event.target;
-    setControlValues({
-      ...controlValues,
-      [id]: parseFloat(value),
+    setControlValues((vals) => {
+      return {
+        ...vals,
+        [id]: parseFloat(value),
+      };
     });
   };
 
