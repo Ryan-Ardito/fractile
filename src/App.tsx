@@ -7,8 +7,7 @@ import { useEffect, useRef } from "react";
 const BASE_NUDGE = 156543.03392804096;
 
 function App() {
-  const { fractalMap, tileLayer, controlValues, setControlValues } =
-    useAppContext();
+  const { fractalMap, controlValues, setControlValues } = useAppContext();
 
   const prevFrameTime = useRef<number | undefined>(undefined);
   const frameId = useRef<number | undefined>(undefined);
@@ -72,7 +71,6 @@ function App() {
   }, [controlValues.animatingColor]);
 
   useEffect(() => {
-    console.log("in arrow key handler useEffect");
     const handleKey = (event: KeyboardEvent) => {
       const mapView = fractalMap.current?.getView();
       const zoom = mapView?.getZoom();
@@ -104,12 +102,8 @@ function App() {
   }, [controlValues.menuCollapsed]);
 
   useEffect(() => {
-    console.log("in key handler useEffect");
     const handleKey = (event: KeyboardEvent) => {
-      const mapView = fractalMap.current?.getView();
-      const zoom = mapView?.getZoom();
-
-      if (event.key === " " && mapView && zoom) {
+      if (event.key === " ") {
         event.preventDefault();
         setControlValues((vals) => {
           return {
@@ -125,63 +119,6 @@ function App() {
       document.removeEventListener("keydown", handleKey);
     };
   }, []);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjPaletteScale = 2 ** (controlValues.paletteScale - 5);
-      tileLayer.current.updateStyleVariables({
-        ["paletteScale"]: adjPaletteScale,
-      });
-    }
-  }, [controlValues.paletteScale]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandSpacing = 2 ** controlValues.bandSpacing;
-      tileLayer.current.updateStyleVariables({
-        ["bandSpacing"]: adjBandSpacing,
-      });
-    }
-  }, [controlValues.bandSpacing]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["bandContrast"]: controlValues.bandContrast,
-      });
-    }
-  }, [controlValues.bandContrast]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["hueOffset"]: controlValues.hueOffset,
-      });
-    }
-  }, [controlValues.hueOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandOffset = controlValues.bandOffset * Math.PI;
-      tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
-    }
-  }, [controlValues.bandOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["saturation"]: controlValues.saturation,
-      });
-    }
-  }, [controlValues.saturation]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["lightness"]: controlValues.lightness,
-      });
-    }
-  }, [controlValues.lightness]);
 
   return (
     <>

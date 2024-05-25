@@ -43,7 +43,65 @@ const loadTile = (z: number, x: number, y: number): Promise<Uint8Array> => {
 };
 
 export const MapComponent = () => {
-  const { fractalMap, tileLayer } = useAppContext();
+  const { fractalMap, tileLayer, controlValues } = useAppContext();
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjPaletteScale = 2 ** (controlValues.paletteScale - 5);
+      tileLayer.current.updateStyleVariables({
+        ["paletteScale"]: adjPaletteScale,
+      });
+    }
+  }, [controlValues.paletteScale]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjBandSpacing = 2 ** controlValues.bandSpacing;
+      tileLayer.current.updateStyleVariables({
+        ["bandSpacing"]: adjBandSpacing,
+      });
+    }
+  }, [controlValues.bandSpacing]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({
+        ["bandContrast"]: controlValues.bandContrast,
+      });
+    }
+  }, [controlValues.bandContrast]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({
+        ["hueOffset"]: controlValues.hueOffset,
+      });
+    }
+  }, [controlValues.hueOffset]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      const adjBandOffset = controlValues.bandOffset * Math.PI;
+      tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
+    }
+  }, [controlValues.bandOffset]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({
+        ["saturation"]: controlValues.saturation,
+      });
+    }
+  }, [controlValues.saturation]);
+
+  useEffect(() => {
+    if (tileLayer.current) {
+      tileLayer.current.updateStyleVariables({
+        ["lightness"]: controlValues.lightness,
+      });
+    }
+  }, [controlValues.lightness]);
+
 
   useEffect(() => {
     const zoom = 4;
@@ -64,9 +122,9 @@ export const MapComponent = () => {
         color: colorPixelExpression(),
         variables: {
           iterFalloff: 24,
-          paletteScale: 5,
+          paletteScale: 1,
           hueOffset: 0,
-          bandSpacing: 3,
+          bandSpacing: 8,
           bandContrast: 0.28,
           bandOffset: 0,
           saturation: 0.8,
