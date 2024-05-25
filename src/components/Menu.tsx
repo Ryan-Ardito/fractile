@@ -7,7 +7,8 @@ export const Menu = () => {
 
   const visibility = menuCollapsed ? "collapse" : "visible";
   const opacity = menuCollapsed ? "0%" : "100%";
-  const buttonText = menuCollapsed ? "menu" : "close";
+  const menuButtonText = menuCollapsed ? "menu" : "close";
+  const animateButtonText = controlValues.animatingColor ? "stop" : "animate";
 
   const onMenuButtonClick = () => {
     setMenuCollapsed(!menuCollapsed);
@@ -117,7 +118,7 @@ export const Menu = () => {
   return (
     <>
       <button id="menuButton" onClick={onMenuButtonClick}>
-        {buttonText}
+        {menuButtonText}
       </button>
       <div id="floatingBox" style={{ visibility, opacity }}>
         <button
@@ -131,7 +132,7 @@ export const Menu = () => {
             })
           }
         >
-          {controlValues.animatingColor ? "stop" : "animate"}
+          {animateButtonText}
         </button>
         {controlInputs.map((inputRange, index) => (
           <label key={index}>
