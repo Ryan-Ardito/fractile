@@ -11,7 +11,9 @@ export const Menu = () => {
   const animateButtonText = controlValues.isAnimating ? "stop" : "animate";
 
   const onMenuButtonClick = () => {
-    setControlValues({ ...controlValues, menuCollapsed: !menuCollapsed });
+    setControlValues((vals) => {
+      return { ...vals, menuCollapsed: !vals.menuCollapsed };
+    });
   };
 
   const handleSliderInput = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,8 +81,8 @@ export const Menu = () => {
             step="0.1"
             value={controlValues.animationSpeed}
             ref={(el) => (inputRefs.current[0] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 0)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={1}>
@@ -93,8 +95,8 @@ export const Menu = () => {
             step="0.01"
             value={controlValues.paletteScale}
             ref={(el) => (inputRefs.current[1] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 1)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={2}>
@@ -107,8 +109,8 @@ export const Menu = () => {
             step="0.005"
             value={controlValues.bandSpacing}
             ref={(el) => (inputRefs.current[2] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 2)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={3}>
@@ -121,8 +123,8 @@ export const Menu = () => {
             step="0.01"
             value={controlValues.bandContrast}
             ref={(el) => (inputRefs.current[3] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 3)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={4}>
@@ -136,8 +138,8 @@ export const Menu = () => {
             list="zeroMarker"
             value={controlValues.bandOffset}
             ref={(el) => (inputRefs.current[4] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 4)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={5}>
@@ -151,8 +153,8 @@ export const Menu = () => {
             value={controlValues.bandHueSpeed}
             list="bandHueMarkers"
             ref={(el) => (inputRefs.current[5] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 5)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={6}>
@@ -166,8 +168,8 @@ export const Menu = () => {
             list="zeroMarker"
             value={controlValues.hueOffset}
             ref={(el) => (inputRefs.current[6] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 6)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={7}>
@@ -181,8 +183,8 @@ export const Menu = () => {
             value={controlValues.saturation}
             list="oneMarker"
             ref={(el) => (inputRefs.current[7] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 7)}
+            onChange={handleSliderInput}
           />
         </label>
         <label key={8}>
@@ -196,8 +198,8 @@ export const Menu = () => {
             value={controlValues.lightness}
             list="oneMarker"
             ref={(el) => (inputRefs.current[8] = el)}
-            onChange={handleSliderInput}
             onKeyDown={(e) => handleKeyDown(e, 8)}
+            onChange={handleSliderInput}
           />
         </label>
         <datalist id="zeroMarker">
