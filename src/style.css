@@ -67,15 +67,12 @@ input {
   height: 2rem;
   width: 3rem;
   opacity: 40%;
-  border-radius: 6px;
   bottom: 12px;
   left: 12px;
-  color: white;
-  background: #303030;
-  border: 1px solid #ccc;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   z-index: 1;
 }
+
 button {
   border-radius: 6px;
   color: white;

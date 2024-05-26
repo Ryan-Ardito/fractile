@@ -14,17 +14,17 @@ export const colorPixelExpression = (): ExpressionValue => {
 
   const pixelIters = ["band", 1];
 
-  const hueIters = ["/", pixelIters, paletteScale];
+  const hueIters = ["*", pixelIters, paletteScale];
   const pixelHue = ["%", ["+", hueIters, hueOffset], HUE_SCALE];
 
-  const bandIters = ["/", pixelIters, bandSpacing];
+  const bandIters = ["*", pixelIters, bandSpacing];
   const adjBand = ["sin", ["+", bandIters, bandOffset]];
   const pixelBand = ["*", bandContrast, adjBand];
   const bandStrength = ["+", 0.5, pixelBand];
 
   const pixelSaturation = ["*", bandStrength, saturation];
 
-  const falloff = ["clamp", ["/", ["-", pixelIters, 1], iterFalloff], 0, 1];
+  const falloff = ["clamp", ["*", ["-", pixelIters, 1], iterFalloff], 0, 1];
   const pixelLightness = ["*", ["*", lightness, bandStrength], falloff];
 
   return hslToRgb(pixelHue, pixelSaturation, pixelLightness);
