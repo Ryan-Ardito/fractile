@@ -69,8 +69,8 @@ export const MapComponent = () => {
 
   useEffect(() => {
     if (tileLayer.current) {
-      const adjPaletteScale = 2 ** (paletteScale - 5);
-      const adjBandSpacing = 2 ** bandSpacing;
+      const adjPaletteScale = 1 / 2 ** (paletteScale - 5);
+      const adjBandSpacing = 1 / 2 ** bandSpacing;
       const adjBandOffset = bandOffset * Math.PI;
 
       tileLayer.current.updateStyleVariables({
@@ -116,10 +116,10 @@ export const MapComponent = () => {
       style: {
         color: colorPixelExpression(),
         variables: {
-          iterFalloff: 24,
+          iterFalloff: 1 / 24,
           paletteScale: 1,
           hueOffset: 0,
-          bandSpacing: 8,
+          bandSpacing: 1 / 8,
           bandContrast: 0.28,
           bandOffset: 0,
           saturation: 0.8,
