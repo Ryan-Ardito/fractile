@@ -71,7 +71,7 @@ export const Menu = () => {
         >
           {animateButtonText}
         </button>
-        <label key={0}>
+        <label>
           {"animation speed"}: {controlValues.animationSpeed}
           <input
             type="range"
@@ -85,7 +85,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={1}>
+        <label>
           {"palette scale"}: {controlValues.paletteScale}
           <input
             type="range"
@@ -99,7 +99,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={2}>
+        <label>
           {"band spacing"}: {controlValues.bandSpacing}
           <input
             type="range"
@@ -113,7 +113,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={3}>
+        <label>
           {"band contrast"}: {controlValues.bandContrast}
           <input
             type="range"
@@ -127,10 +127,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label
-          key={4}
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
-        >
+        <label style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
           band offset: {controlValues.bandOffset.toFixed(2)}
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
@@ -168,14 +165,16 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={5}>
-          band/hue speed: {controlValues.bandHueSpeed}
+        <label>
+          band/hue speed:{" "}
+          {(Math.min(1, (1 - controlValues.bandHueSpeed) * 2) * 100).toFixed(0)}% /{" "}
+          {(Math.min(1, controlValues.bandHueSpeed * 2) * 100).toFixed(0)}%
           <input
             type="range"
             id="bandHueSpeed"
             min="0"
             max="1"
-            step="0.01"
+            step="0.005"
             value={controlValues.bandHueSpeed}
             list="bandHueMarkers"
             ref={(el) => (inputRefs.current[5] = el)}
@@ -224,7 +223,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={7}>
+        <label>
           saturation: {controlValues.saturation}
           <input
             type="range"
@@ -239,7 +238,7 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={8}>
+        <label>
           lightness: {controlValues.lightness}
           <input
             type="range"
@@ -261,11 +260,9 @@ export const Menu = () => {
           <option value="1"></option>
         </datalist>
         <datalist id="bandHueMarkers">
-          <option value="0"></option>
           <option value="0.25"></option>
           <option value="0.5"></option>
           <option value="0.75"></option>
-          <option value="1"></option>
         </datalist>
       </div>
     </>
