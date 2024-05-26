@@ -58,20 +58,25 @@ function App() {
     const framesPassed = elapsed / frameDuration;
     const bandHueSpeed = controlValuesRef.current.bandHueSpeed;
 
+    const bandDirection = controlValuesRef.current.bandDirection;
     const bandSpeed = Math.min(1, (1 - bandHueSpeed) * 2);
     const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
     const bandOffset = controlValuesRef.current.bandOffset * Math.PI;
-    let newBandOffset = bandOffset + bandStep;
-    if (newBandOffset > Math.PI) {
-      newBandOffset -= Math.PI * 2;
+    let newBandOffset =
+      bandOffset + bandStep * controlValuesRef.current.bandDirection;
+    if (Math.abs(newBandOffset) > Math.PI) {
+      newBandOffset -= Math.PI * 2 * bandDirection;
     }
 
+    const hueDirection = controlValuesRef.current.hueDirection;
     const hueSpeed = Math.min(1, bandHueSpeed * 2);
     const hueStep = hueSpeed * framesPassed;
     const hueOffset = controlValuesRef.current.hueOffset;
-    let newHueOffset = hueOffset - hueStep;
-    if (controlValuesRef.current.hueOffset < -180) {
-      newHueOffset += 360;
+    let newHueOffset =
+      hueOffset + hueStep * hueDirection;
+    if (Math.abs(newHueOffset) > 180) {
+      newHueOffset -= 360 * hueDirection;
+
     }
 
     setControlValues({

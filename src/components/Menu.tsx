@@ -127,9 +127,39 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={4}>
+        <label
+          key={4}
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
+        >
           band offset: {controlValues.bandOffset.toFixed(2)}
+          <div
+            style={{ display: "flex", columnGap: "4px", justifySelf: "end" }}
+          >
+          <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
+            <button
+              onClick={() =>
+                setControlValues((vals) => {
+                  return { ...vals, bandDirection: -1 };
+                })
+              }
+              disabled={controlValues.bandDirection != 1}
+            >
+              &lt;
+            </button>
+            <button
+              onClick={() =>
+                setControlValues((vals) => {
+                  return { ...vals, bandDirection: 1 };
+                })
+              }
+              disabled={controlValues.bandDirection != -1}
+            >
+              &gt;
+            </button>
+          </div>
+          </div>
           <input
+            style={{ gridColumn: "span 2" }}
             type="range"
             id="bandOffset"
             min="-1"
@@ -157,9 +187,35 @@ export const Menu = () => {
             onChange={handleSliderInput}
           />
         </label>
-        <label key={6}>
+        <label
+          key={6}
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
+        >
           hue offset: {controlValues.hueOffset.toFixed(0)}
+          <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
+            <button
+              onClick={() =>
+                setControlValues((vals) => {
+                  return { ...vals, hueDirection: -1 };
+                })
+              }
+              disabled={controlValues.hueDirection != 1}
+            >
+              &lt;
+            </button>
+            <button
+              onClick={() =>
+                setControlValues((vals) => {
+                  return { ...vals, hueDirection: 1 };
+                })
+              }
+              disabled={controlValues.hueDirection != -1}
+            >
+              &gt;
+            </button>
+          </div>
           <input
+            style={{ gridColumn: "span 2" }}
             type="range"
             id="hueOffset"
             min="-180"
