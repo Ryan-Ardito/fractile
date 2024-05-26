@@ -14,7 +14,7 @@ export const Menu = () => {
     setControlValues({ ...controlValues, menuCollapsed: !menuCollapsed });
   };
 
-  const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSliderInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = event.target;
 
     const bandHueSpeed = controlValues.bandHueSpeed;
@@ -50,86 +50,6 @@ export const Menu = () => {
     }
   };
 
-  const controlInputs = [
-    {
-      id: "animationSpeed",
-      label: "animation speed",
-      min: "1",
-      max: "10",
-      step: "0.1",
-      value: controlValues.animationSpeed,
-    },
-    {
-      id: "paletteScale",
-      label: "palette scale",
-      min: "1",
-      max: "10",
-      step: "0.01",
-      value: controlValues.paletteScale,
-    },
-    {
-      id: "bandSpacing",
-      label: "band spacing",
-      min: "1",
-      max: "10",
-      step: "0.005",
-      value: controlValues.bandSpacing,
-    },
-    {
-      id: "bandContrast",
-      label: "band contrast",
-      min: "0",
-      max: "0.5",
-      step: "0.01",
-      value: controlValues.bandContrast,
-    },
-    {
-      id: "bandOffset",
-      label: "band offset",
-      displayVal: controlValues.bandOffset.toFixed(2),
-      min: "-1",
-      max: "1",
-      step: "0.01",
-      value: controlValues.bandOffset,
-    },
-    {
-      id: "bandHueSpeed",
-      label: "band/hue speed",
-      min: "0",
-      max: "1",
-      step: "0.01",
-      value: controlValues.bandHueSpeed,
-      list: "bandHueMarkers",
-    },
-    {
-      id: "hueOffset",
-      label: "hue offset",
-      displayVal: controlValues.hueOffset.toFixed(0),
-      min: "-180",
-      max: "179",
-      step: "1",
-      value: controlValues.hueOffset,
-    },
-    {
-      id: "saturation",
-      label: "saturation",
-      min: "0",
-      max: "2",
-      step: "0.01",
-      value: controlValues.saturation,
-      list: "oneMarker",
-    },
-    {
-      id: "lightness",
-      label: "lightness",
-      min: "0",
-      max: "2",
-      step: "0.01",
-      value: controlValues.lightness,
-      list: "oneMarker",
-    },
-  ];
-
   return (
     <>
       <button id="menuButton" onClick={onMenuButtonClick}>
@@ -149,23 +69,135 @@ export const Menu = () => {
         >
           {animateButtonText}
         </button>
-        {controlInputs.map((inputRange, index) => (
-          <label key={index}>
-            {inputRange.label}: {inputRange.displayVal || inputRange.value}
+          <label key={0}>
+            {"animation speed"}: {controlValues.animationSpeed}
             <input
               type="range"
-              id={inputRange.id}
-              min={inputRange.min}
-              max={inputRange.max}
-              step={inputRange.step}
-              value={inputRange.value}
-              list={inputRange.list}
-              ref={(el) => (inputRefs.current[index] = el)}
-              onChange={handleSliderChange}
-              onKeyDown={(e) => handleKeyDown(e, index)}
+              id="animationSpeed"
+              min="1"
+              max="10"
+              step="0.1"
+              value={controlValues.animationSpeed}
+              ref={(el) => (inputRefs.current[0] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 0)}
             />
           </label>
-        ))}
+          <label key={1}>
+            {"palette scale"}: {controlValues.paletteScale}
+            <input
+              type="range"
+              id="paletteScale"
+              min="1"
+              max="10"
+              step="0.01"
+              value={controlValues.paletteScale}
+              ref={(el) => (inputRefs.current[1] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 1)}
+            />
+          </label>
+          <label key={2}>
+            {"band spacing"}: {controlValues.bandSpacing}
+            <input
+              type="range"
+              id="bandSpacing"
+              min="1"
+              max="10"
+              step="0.005"
+              value={controlValues.bandSpacing}
+              ref={(el) => (inputRefs.current[2] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 2)}
+            />
+          </label>
+          <label key={3}>
+            {"band contrast"}: {controlValues.bandContrast}
+            <input
+              type="range"
+              id="bandContrast"
+              min="0"
+              max="0.5"
+              step="0.01"
+              value={controlValues.bandContrast}
+              ref={(el) => (inputRefs.current[3] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 3)}
+            />
+          </label>
+          <label key={4}>
+            band offset: {controlValues.bandOffset.toFixed(2)}
+            <input
+              type="range"
+              id="bandOffset"
+              min="-1"
+              max="1"
+              step="0.01"
+              value={controlValues.bandOffset}
+              ref={(el) => (inputRefs.current[4] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 4)}
+            />
+          </label>
+          <label key={5}>
+            band/hue speed: {controlValues.bandHueSpeed}
+            <input
+              type="range"
+              id="bandHueSpeed"
+              min="0"
+              max="1"
+              step="0.01"
+              value={controlValues.bandHueSpeed}
+              list="bandHueMarkers"
+              ref={(el) => (inputRefs.current[5] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 5)}
+            />
+          </label>
+          <label key={6}>
+            hue offset: {controlValues.hueOffset.toFixed(0)}
+            <input
+              type="range"
+              id="hueOffset"
+              min="-180"
+              max="179"
+              step="1"
+              value={controlValues.hueOffset}
+              ref={(el) => (inputRefs.current[6] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 6)}
+            />
+          </label>
+          <label key={7}>
+            saturation: {controlValues.saturation}
+            <input
+              type="range"
+              id="saturation"
+              min="0"
+              max="2"
+              step="0.01"
+              value={controlValues.saturation}
+              list="oneMarker"
+              ref={(el) => (inputRefs.current[7] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 7)}
+            />
+          </label>
+          <label key={8}>
+            lightness: {controlValues.lightness}
+            <input
+              type="range"
+              id="lightness"
+              min="0"
+              max="2"
+              step="0.01"
+              value={controlValues.lightness}
+              list="oneMarker"
+              ref={(el) => (inputRefs.current[8] = el)}
+              onChange={handleSliderInput}
+              onKeyDown={(e) => handleKeyDown(e, 8)}
+            />
+          </label>
         <datalist id="oneMarker">
           <option value="1"></option>
         </datalist>
