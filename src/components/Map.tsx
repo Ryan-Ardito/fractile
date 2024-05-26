@@ -129,7 +129,6 @@ export const MapComponent = () => {
       extent,
       preload: Infinity,
       source: new DataTile({
-        // interpolate: true,
         bandCount: 1,
         transition: 0,
         tileSize: TILE_SIZE,

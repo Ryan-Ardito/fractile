@@ -9,7 +9,7 @@ import React, {
 } from "react";
 
 type ControlValues = {
-  animatingColor: boolean;
+  isAnimating: boolean;
   menuCollapsed: boolean;
   bandOffset: number;
   hueOffset: number;
@@ -39,7 +39,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const fractalMap = useRef<Map | undefined>(undefined);
   const tileLayer = useRef<TileLayer | undefined>(undefined);
   const [controlValues, setControlValues] = useState({
-    animatingColor: false,
+    isAnimating: false,
     menuCollapsed: true,
     bandOffset: 0,
     hueOffset: 0,

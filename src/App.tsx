@@ -80,7 +80,7 @@ function App() {
       hueOffset: newHueOffset,
     });
 
-    if (controlValuesRef.current.animatingColor) {
+    if (controlValuesRef.current.isAnimating) {
       frameId.current = requestAnimationFrame(animateColor);
     } else {
       prevFrameTime.current = undefined;
@@ -89,7 +89,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (controlValues.animatingColor) {
+    if (controlValues.isAnimating) {
       frameId.current = requestAnimationFrame(animateColor);
     }
     return () => {
@@ -99,7 +99,7 @@ function App() {
         frameId.current = undefined;
       }
     };
-  }, [controlValues.animatingColor]);
+  }, [controlValues.isAnimating]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -189,7 +189,7 @@ function App() {
           setControlValues((vals) => {
             return {
               ...vals,
-              animatingColor: !vals.animatingColor,
+              isAnimating: !vals.isAnimating,
             };
           });
           break;

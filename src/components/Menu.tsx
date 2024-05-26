@@ -8,7 +8,7 @@ export const Menu = () => {
   const visibility = menuCollapsed ? "collapse" : "visible";
   const opacity = menuCollapsed ? "0%" : "100%";
   const menuButtonText = menuCollapsed ? "menu" : "close";
-  const animateButtonText = controlValues.animatingColor ? "stop" : "animate";
+  const animateButtonText = controlValues.isAnimating ? "stop" : "animate";
 
   const onMenuButtonClick = () => {
     setControlValues({ ...controlValues, menuCollapsed: !menuCollapsed });
@@ -18,18 +18,18 @@ export const Menu = () => {
     const { id, value } = event.target;
 
     const bandHueSpeed = controlValues.bandHueSpeed;
-    let animatingColor = controlValues.animatingColor;
+    let isAnimating = controlValues.isAnimating;
     if (
       (id === "hueOffset" && bandHueSpeed != 0) ||
       (id === "bandOffset" && bandHueSpeed != 1)
     ) {
-      animatingColor = false;
+      isAnimating = false;
     }
 
     setControlValues((vals) => {
       return {
         ...vals,
-        animatingColor,
+        isAnimating: isAnimating,
         [id]: parseFloat(value),
       };
     });
@@ -62,7 +62,7 @@ export const Menu = () => {
             setControlValues((vals) => {
               return {
                 ...vals,
-                animatingColor: !vals.animatingColor,
+                isAnimating: !vals.isAnimating,
               };
             })
           }
