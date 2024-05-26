@@ -132,9 +132,6 @@ export const Menu = () => {
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
         >
           band offset: {controlValues.bandOffset.toFixed(2)}
-          <div
-            style={{ display: "flex", columnGap: "4px", justifySelf: "end" }}
-          >
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
               onClick={() =>
@@ -156,7 +153,6 @@ export const Menu = () => {
             >
               &gt;
             </button>
-          </div>
           </div>
           <input
             style={{ gridColumn: "span 2" }}
