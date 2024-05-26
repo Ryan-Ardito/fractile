@@ -11,7 +11,6 @@ import { useAppContext } from "../AppContext";
 
 const TILE_SIZE = 256;
 const BASE_ITERATIONS = 1024;
-const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
 
 export const locationFromHash = (hash: string): [number, Coordinate] => {
   const trim_hash = hash.replace("#map=", "");
@@ -94,6 +93,7 @@ export const MapComponent = () => {
   ]);
 
   useEffect(() => {
+    const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
     let zoom = 4;
     let center: Coordinate = [-1200000, 0];
     if (window.location.hash) {
