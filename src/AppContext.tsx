@@ -22,7 +22,7 @@ type ControlValues = {
   lightness: number;
 };
 
-interface AppContextType {
+type AppContextType = {
   fractalMap: React.MutableRefObject<Map | undefined>;
   tileLayer: React.MutableRefObject<TileLayer | undefined>;
   controlValues: ControlValues;
@@ -31,7 +31,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-interface AnimationProviderProps {
+type AnimationProviderProps = {
   children: ReactNode;
 }
 
