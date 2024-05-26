@@ -74,10 +74,16 @@ input {
 }
 
 button {
+  cursor: pointer;
   border-radius: 6px;
   color: white;
   background: #303030;
   border: 1px solid #ccc;
+}
+
+button:disabled {
+  cursor: default;
+  color: gray;
 }
 
 #animateButton {
