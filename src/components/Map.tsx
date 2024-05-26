@@ -56,63 +56,41 @@ const loadTile = (z: number, x: number, y: number): Promise<Float32Array> => {
 
 export const MapComponent = () => {
   const { fractalMap, tileLayer, controlValues } = useAppContext();
+  const {
+    paletteScale,
+    bandSpacing,
+    bandContrast,
+    hueOffset,
+    bandOffset,
+    saturation,
+    lightness,
+  } = controlValues;
 
   useEffect(() => {
     if (tileLayer.current) {
-      const adjPaletteScale = 2 ** (controlValues.paletteScale - 5);
+      const adjPaletteScale = 2 ** (paletteScale - 5);
+      const adjBandSpacing = 2 ** bandSpacing;
+      const adjBandOffset = bandOffset * Math.PI;
+
       tileLayer.current.updateStyleVariables({
-        ["paletteScale"]: adjPaletteScale,
+        paletteScale: adjPaletteScale,
+        bandSpacing: adjBandSpacing,
+        bandContrast,
+        hueOffset,
+        bandOffset: adjBandOffset,
+        saturation,
+        lightness,
       });
     }
-  }, [controlValues.paletteScale]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandSpacing = 2 ** controlValues.bandSpacing;
-      tileLayer.current.updateStyleVariables({
-        ["bandSpacing"]: adjBandSpacing,
-      });
-    }
-  }, [controlValues.bandSpacing]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["bandContrast"]: controlValues.bandContrast,
-      });
-    }
-  }, [controlValues.bandContrast]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["hueOffset"]: controlValues.hueOffset,
-      });
-    }
-  }, [controlValues.hueOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjBandOffset = controlValues.bandOffset * Math.PI;
-      tileLayer.current.updateStyleVariables({ ["bandOffset"]: adjBandOffset });
-    }
-  }, [controlValues.bandOffset]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["saturation"]: controlValues.saturation,
-      });
-    }
-  }, [controlValues.saturation]);
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      tileLayer.current.updateStyleVariables({
-        ["lightness"]: controlValues.lightness,
-      });
-    }
-  }, [controlValues.lightness]);
+  }, [
+    paletteScale,
+    bandSpacing,
+    bandContrast,
+    hueOffset,
+    bandOffset,
+    saturation,
+    lightness,
+  ]);
 
   useEffect(() => {
     let zoom = 4;
