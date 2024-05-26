@@ -1,11 +1,12 @@
 import { View } from "ol";
 import { Extent } from "ol/extent";
-import { useEffect } from "react";
 import DataTile from "ol/source/DataTile";
 import Map from "ol/Map";
 import TileLayer from "ol/layer/WebGLTile";
 import { colorPixelExpression } from "../colorGL";
 import { Coordinate } from "ol/coordinate";
+import { useEffect } from "react";
+
 import { useAppContext } from "../AppContext";
 
 const TILE_SIZE = 256;
