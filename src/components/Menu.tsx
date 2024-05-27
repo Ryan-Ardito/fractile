@@ -86,6 +86,23 @@ export const Menu = () => {
           />
         </label>
         <label>
+          band/hue speed:{" "}
+          {(Math.min(1, (1 - controlValues.bandHueSpeed) * 2) * 100).toFixed(0)}% /{" "}
+          {(Math.min(1, controlValues.bandHueSpeed * 2) * 100).toFixed(0)}%
+          <input
+            type="range"
+            id="bandHueSpeed"
+            min="0"
+            max="1"
+            step="0.005"
+            value={controlValues.bandHueSpeed}
+            list="bandHueMarkers"
+            ref={(el) => (inputRefs.current[5] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 5)}
+            onChange={handleSliderInput}
+          />
+        </label>
+        <label>
           {"palette scale"}: {controlValues.paletteScale}
           <input
             type="range"
@@ -162,23 +179,6 @@ export const Menu = () => {
             value={controlValues.bandOffset}
             ref={(el) => (inputRefs.current[4] = el)}
             onKeyDown={(e) => handleKeyDown(e, 4)}
-            onChange={handleSliderInput}
-          />
-        </label>
-        <label>
-          band/hue speed:{" "}
-          {(Math.min(1, (1 - controlValues.bandHueSpeed) * 2) * 100).toFixed(0)}% /{" "}
-          {(Math.min(1, controlValues.bandHueSpeed * 2) * 100).toFixed(0)}%
-          <input
-            type="range"
-            id="bandHueSpeed"
-            min="0"
-            max="1"
-            step="0.005"
-            value={controlValues.bandHueSpeed}
-            list="bandHueMarkers"
-            ref={(el) => (inputRefs.current[5] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 5)}
             onChange={handleSliderInput}
           />
         </label>
