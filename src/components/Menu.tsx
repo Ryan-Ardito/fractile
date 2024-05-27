@@ -72,12 +72,12 @@ export const Menu = () => {
           {animateButtonText}
         </button>
         <label>
-          {"animation speed"}: {controlValues.animationSpeed}
+          {"animation speed"}: {controlValues.animationSpeed} bpm
           <input
             type="range"
             id="animationSpeed"
             min="1"
-            max="10"
+            max="256"
             step="0.1"
             value={controlValues.animationSpeed}
             ref={(el) => (inputRefs.current[0] = el)}

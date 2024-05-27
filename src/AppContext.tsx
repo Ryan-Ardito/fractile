@@ -47,7 +47,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
     menuCollapsed: true,
     bandOffset: 0,
     hueOffset: 0,
-    animationSpeed: 5,
+    animationSpeed: 128,
     paletteScale: 5,
     bandSpacing: 3,
     bandContrast: 0.28,

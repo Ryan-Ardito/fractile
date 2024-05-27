@@ -49,7 +49,7 @@ function App() {
   }, [controlValues]);
 
   const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 1000 / 2 ** controlValuesRef.current.animationSpeed;
+    const frameDuration = 60000 / controlValuesRef.current.animationSpeed;
     if (!prevFrameTime.current) {
       prevFrameTime.current = timestamp;
     }
@@ -60,7 +60,7 @@ function App() {
 
     const bandDirection = controlValuesRef.current.bandDirection;
     const bandSpeed = Math.min(1, (1 - bandHueSpeed) * 2);
-    const bandStep = (Math.PI / 60) * bandSpeed * framesPassed;
+    const bandStep = (Math.PI) * bandSpeed * framesPassed;
     const bandOffset = controlValuesRef.current.bandOffset * Math.PI;
     let newBandOffset =
       bandOffset + bandStep * controlValuesRef.current.bandDirection;
@@ -70,7 +70,7 @@ function App() {
 
     const hueDirection = controlValuesRef.current.hueDirection;
     const hueSpeed = Math.min(1, bandHueSpeed * 2);
-    const hueStep = hueSpeed * framesPassed;
+    const hueStep = 90 * hueSpeed * framesPassed;
     const hueOffset = controlValuesRef.current.hueOffset;
     let newHueOffset =
       hueOffset + hueStep * hueDirection;
