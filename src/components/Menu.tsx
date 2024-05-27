@@ -78,7 +78,7 @@ export const Menu = () => {
             id="animationSpeed"
             min="1"
             max="256"
-            step="0.1"
+            step="1"
             value={controlValues.animationSpeed}
             ref={(el) => (inputRefs.current[0] = el)}
             onKeyDown={(e) => handleKeyDown(e, 0)}
