@@ -8,7 +8,7 @@ const BASE_NUDGE = 156543.03392804096;
 const MOUSE_HIDE_DELAY = 1000;
 
 function App() {
-  const { fractalMap, controlValues, setControlValues } = useAppContext();
+  const { fractalMap, controlValues, updateControlValues } = useAppContext();
 
   const prevFrameTime = useRef<number | undefined>();
   const frameId = useRef<number | undefined>();
@@ -60,7 +60,7 @@ function App() {
 
     const bandDirection = controlValuesRef.current.bandDirection;
     const bandSpeed = Math.min(1, (1 - bandHueSpeed) * 2);
-    const bandStep = (Math.PI) * bandSpeed * framesPassed;
+    const bandStep = Math.PI * bandSpeed * framesPassed;
     const bandOffset = controlValuesRef.current.bandOffset * Math.PI;
     let newBandOffset =
       bandOffset + bandStep * controlValuesRef.current.bandDirection;
@@ -72,17 +72,14 @@ function App() {
     const hueSpeed = Math.min(1, bandHueSpeed * 2);
     const hueStep = 90 * hueSpeed * framesPassed;
     const hueOffset = controlValuesRef.current.hueOffset;
-    let newHueOffset =
-      hueOffset + hueStep * hueDirection;
+    let newHueOffset = hueOffset + hueStep * hueDirection;
     if (Math.abs(newHueOffset) > 180) {
       newHueOffset -= 360 * hueDirection;
-
     }
 
-    setControlValues({
-      ...controlValuesRef.current,
-      bandOffset: newBandOffset / Math.PI,
-      hueOffset: newHueOffset,
+    updateControlValues({
+      type: "UPDATE_ANIMATION",
+      payload: { newBandOffset, newHueOffset },
     });
 
     if (controlValuesRef.current.isAnimating) {
@@ -191,18 +188,11 @@ function App() {
       switch (event.key) {
         case " ":
           event.preventDefault();
-          setControlValues((vals) => {
-            return {
-              ...vals,
-              isAnimating: !vals.isAnimating,
-            };
-          });
+          updateControlValues({ type: "TOGGLE_ANIMATING" });
           break;
 
         case "Escape":
-          setControlValues((vals) => {
-            return { ...vals, menuCollapsed: true };
-          });
+          updateControlValues({ type: "SET_MENU_COLLAPSED", payload: false });
       }
     };
 

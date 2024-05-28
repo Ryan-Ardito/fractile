@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useAppContext } from "../AppContext";
 
 export const Menu = () => {
-  const { controlValues, setControlValues } = useAppContext();
+  const { controlValues, updateControlValues } = useAppContext();
   const menuCollapsed = controlValues.menuCollapsed;
 
   const visibility = menuCollapsed ? "collapse" : "visible";
@@ -11,30 +11,7 @@ export const Menu = () => {
   const animateButtonText = controlValues.isAnimating ? "stop" : "animate";
 
   const onMenuButtonClick = () => {
-    setControlValues((vals) => {
-      return { ...vals, menuCollapsed: !vals.menuCollapsed };
-    });
-  };
-
-  const handleSliderInput = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = event.target;
-
-    const bandHueSpeed = controlValues.bandHueSpeed;
-    let isAnimating = controlValues.isAnimating;
-    if (
-      (id === "hueOffset" && bandHueSpeed != 0) ||
-      (id === "bandOffset" && bandHueSpeed != 1)
-    ) {
-      isAnimating = false;
-    }
-
-    setControlValues((vals) => {
-      return {
-        ...vals,
-        isAnimating: isAnimating,
-        [id]: parseFloat(value),
-      };
-    });
+    updateControlValues({ type: "TOGGLE_MENU_COLLAPSED" });
   };
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -60,14 +37,7 @@ export const Menu = () => {
       <div id="floatingBox" style={{ visibility, opacity }}>
         <button
           id="animateButton"
-          onClick={() =>
-            setControlValues((vals) => {
-              return {
-                ...vals,
-                isAnimating: !vals.isAnimating,
-              };
-            })
-          }
+          onClick={() => updateControlValues({ type: "TOGGLE_ANIMATING" })}
         >
           {animateButtonText}
         </button>
@@ -82,13 +52,18 @@ export const Menu = () => {
             value={controlValues.animationSpeed}
             ref={(el) => (inputRefs.current[0] = el)}
             onKeyDown={(e) => handleKeyDown(e, 0)}
-            onChange={handleSliderInput}
+            onChange={(e) => {
+              updateControlValues({
+                type: "SET_ANIMATION_SPEED",
+                payload: parseFloat(e.target.value),
+              });
+            }}
           />
         </label>
         <label>
           band/hue speed:{" "}
-          {(Math.min(1, (1 - controlValues.bandHueSpeed) * 2) * 100).toFixed(0)}% /{" "}
-          {(Math.min(1, controlValues.bandHueSpeed * 2) * 100).toFixed(0)}%
+          {(Math.min(1, (1 - controlValues.bandHueSpeed) * 2) * 100).toFixed(0)}
+          % / {(Math.min(1, controlValues.bandHueSpeed * 2) * 100).toFixed(0)}%
           <input
             type="range"
             id="bandHueSpeed"
@@ -99,7 +74,12 @@ export const Menu = () => {
             list="bandHueMarkers"
             ref={(el) => (inputRefs.current[5] = el)}
             onKeyDown={(e) => handleKeyDown(e, 5)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_BAND_HUE_SPEED",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label>
@@ -113,7 +93,12 @@ export const Menu = () => {
             value={controlValues.paletteScale}
             ref={(el) => (inputRefs.current[1] = el)}
             onKeyDown={(e) => handleKeyDown(e, 1)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_PALETTE_SCALE",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label>
@@ -127,7 +112,12 @@ export const Menu = () => {
             value={controlValues.bandSpacing}
             ref={(el) => (inputRefs.current[2] = el)}
             onKeyDown={(e) => handleKeyDown(e, 2)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_BAND_SPACING",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label>
@@ -141,7 +131,12 @@ export const Menu = () => {
             value={controlValues.bandContrast}
             ref={(el) => (inputRefs.current[3] = el)}
             onKeyDown={(e) => handleKeyDown(e, 3)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_BAND_CONTRAST",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
@@ -149,9 +144,7 @@ export const Menu = () => {
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
               onClick={() =>
-                setControlValues((vals) => {
-                  return { ...vals, bandDirection: -1 };
-                })
+                updateControlValues({ type: "SET_BAND_DIRECTION", payload: -1 })
               }
               disabled={controlValues.bandDirection != 1}
             >
@@ -159,9 +152,7 @@ export const Menu = () => {
             </button>
             <button
               onClick={() =>
-                setControlValues((vals) => {
-                  return { ...vals, bandDirection: 1 };
-                })
+                updateControlValues({ type: "SET_BAND_DIRECTION", payload: 1 })
               }
               disabled={controlValues.bandDirection != -1}
             >
@@ -179,7 +170,12 @@ export const Menu = () => {
             value={controlValues.bandOffset}
             ref={(el) => (inputRefs.current[4] = el)}
             onKeyDown={(e) => handleKeyDown(e, 4)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_BAND_OFFSET",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label
@@ -190,9 +186,7 @@ export const Menu = () => {
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
               onClick={() =>
-                setControlValues((vals) => {
-                  return { ...vals, hueDirection: -1 };
-                })
+                updateControlValues({ type: "SET_HUE_DIRECTION", payload: -1 })
               }
               disabled={controlValues.hueDirection != 1}
             >
@@ -200,9 +194,7 @@ export const Menu = () => {
             </button>
             <button
               onClick={() =>
-                setControlValues((vals) => {
-                  return { ...vals, hueDirection: 1 };
-                })
+                updateControlValues({ type: "SET_HUE_DIRECTION", payload: 1 })
               }
               disabled={controlValues.hueDirection != -1}
             >
@@ -220,7 +212,12 @@ export const Menu = () => {
             value={controlValues.hueOffset}
             ref={(el) => (inputRefs.current[6] = el)}
             onKeyDown={(e) => handleKeyDown(e, 6)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_HUE_OFFSET",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label>
@@ -235,7 +232,12 @@ export const Menu = () => {
             list="oneMarker"
             ref={(el) => (inputRefs.current[7] = el)}
             onKeyDown={(e) => handleKeyDown(e, 7)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_SATURATION",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <label>
@@ -250,7 +252,12 @@ export const Menu = () => {
             list="oneMarker"
             ref={(el) => (inputRefs.current[8] = el)}
             onKeyDown={(e) => handleKeyDown(e, 8)}
-            onChange={handleSliderInput}
+            onChange={(e) =>
+              updateControlValues({
+                type: "SET_LIGHTNESS",
+                payload: parseFloat(e.target.value),
+              })
+            }
           />
         </label>
         <datalist id="zeroMarker">
