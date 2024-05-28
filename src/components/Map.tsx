@@ -55,42 +55,7 @@ const loadTile = (z: number, x: number, y: number): Promise<Float32Array> => {
 };
 
 export const MapComponent = () => {
-  const { fractalMap, tileLayer, controlValues } = useAppContext();
-  const {
-    paletteScale,
-    bandSpacing,
-    bandContrast,
-    hueOffset,
-    bandOffset,
-    saturation,
-    lightness,
-  } = controlValues;
-
-  useEffect(() => {
-    if (tileLayer.current) {
-      const adjPaletteScale = 1 / 2 ** (paletteScale - 5);
-      const adjBandSpacing = 1 / 2 ** bandSpacing;
-      const adjBandOffset = bandOffset * Math.PI;
-
-      tileLayer.current.updateStyleVariables({
-        paletteScale: adjPaletteScale,
-        bandSpacing: adjBandSpacing,
-        bandContrast,
-        hueOffset,
-        bandOffset: adjBandOffset,
-        saturation,
-        lightness,
-      });
-    }
-  }, [
-    paletteScale,
-    bandSpacing,
-    bandContrast,
-    hueOffset,
-    bandOffset,
-    saturation,
-    lightness,
-  ]);
+  const { fractalMap, tileLayer } = useAppContext();
 
   useEffect(() => {
     const extent: Extent = [-30000000, -15000000, 30000000, 15000000];
