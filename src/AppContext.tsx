@@ -175,7 +175,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
       case "SET_BAND_CONTRAST":
         if (tileLayer.current) {
           tileLayer.current.updateStyleVariables({
-            bandSpacing: action.payload,
+            bandContrast: action.payload,
           });
         }
         return { ...state, bandContrast: action.payload };
