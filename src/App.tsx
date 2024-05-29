@@ -43,7 +43,7 @@ function App() {
   }, []);
 
   const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = 60000 / animationValues.current.animationSpeed;
+    const frameDuration = animationValues.current.frameDuration;
     if (!prevFrameTime.current) {
       prevFrameTime.current = timestamp;
     }
@@ -55,11 +55,12 @@ function App() {
     const bandDirection = animationValues.current.bandDirection;
     const bandSpeed = Math.min(1, (1 - bandHueSpeed) * 2);
     const bandStep = Math.PI * bandSpeed * framesPassed;
-    const bandOffset = animationValues.current.bandOffset * Math.PI;
+    const bandOffset = animationValues.current.bandOffset;
     let newBandOffset =
       bandOffset + bandStep * animationValues.current.bandDirection;
     if (Math.abs(newBandOffset) > Math.PI) {
       newBandOffset -= Math.PI * 2 * bandDirection;
+      newBandOffset %= Math.PI;
     }
 
     const hueDirection = animationValues.current.hueDirection;
@@ -69,9 +70,10 @@ function App() {
     let newHueOffset = hueOffset + hueStep * hueDirection;
     if (Math.abs(newHueOffset) > 180) {
       newHueOffset -= 360 * hueDirection;
+      newHueOffset %= 180;
     }
 
-    animationValues.current.bandOffset = newBandOffset / Math.PI;
+    animationValues.current.bandOffset = newBandOffset;
     animationValues.current.hueOffset = newHueOffset;
     updateControlValues({
       type: "UPDATE_ANIMATION",

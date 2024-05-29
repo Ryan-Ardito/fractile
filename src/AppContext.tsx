@@ -28,16 +28,10 @@ type AnimationValues = {
   hueDirection: number;
   bandDirection: number;
   isAnimating: boolean;
-  // menuCollapsed: boolean;
   bandOffset: number;
   hueOffset: number;
-  animationSpeed: number;
-  // paletteScale: number;
-  // bandSpacing: number;
-  // bandContrast: number;
+  frameDuration: number;
   bandHueSpeed: number;
-  // saturation: number;
-  // lightness: number;
 };
 
 type AppContextType = {
@@ -78,16 +72,10 @@ const DEFAULT_VALUES: AnimationValues = {
   hueDirection: -1,
   bandDirection: 1,
   isAnimating: false,
-  // menuCollapsed: true,
   bandOffset: 0,
   hueOffset: 0,
-  animationSpeed: 128,
-  // paletteScale: 5,
-  // bandSpacing: 3,
-  // bandContrast: 0.28,
+  frameDuration: 60000 / 128,
   bandHueSpeed: 0.5,
-  // saturation: 0.8,
-  // lightness: 1,
 };
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
@@ -96,7 +84,6 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 
   const animationValues = useRef(DEFAULT_VALUES);
 
-  // Reducer function
   const controlValuesReducer = (
     state: ControlValues,
     action: Action
@@ -113,7 +100,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
         }
         return {
           ...state,
-          bandOffset: newBandOffset / Math.PI,
+          bandOffset: newBandOffset,
           hueOffset: newHueOffset,
         };
 
@@ -124,7 +111,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 
       case "SET_BAND_DIRECTION":
         const bandDirection = action.payload;
-        animationValues.current.hueDirection = bandDirection;
+        animationValues.current.bandDirection = bandDirection;
         return { ...state, bandDirection };
 
       case "TOGGLE_ANIMATING":
@@ -139,7 +126,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
         return { ...state, menuCollapsed: action.payload };
 
       case "SET_BAND_OFFSET":
-        animationValues.current.bandOffset = action.payload;
+        animationValues.current.bandOffset = action.payload * Math.PI;
         const adjBandOffset = action.payload * Math.PI;
         if (tileLayer.current) {
           tileLayer.current.updateStyleVariables({
@@ -164,7 +151,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
         return { ...state, hueOffset: action.payload };
 
       case "SET_ANIMATION_SPEED":
-        animationValues.current.animationSpeed = action.payload;
+        animationValues.current.frameDuration = 60000 / action.payload;
         return { ...state, animationSpeed: action.payload };
 
       case "SET_PALETTE_SCALE":
