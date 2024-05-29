@@ -95,7 +95,7 @@ export const MapComponent = () => {
       preload: Infinity,
       source: new DataTile({
         bandCount: 1,
-        transition: 0,
+        transition: 100,
         tileSize: TILE_SIZE,
         loader: loadTile,
       }),
