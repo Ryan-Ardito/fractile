@@ -126,11 +126,11 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
         return { ...state, menuCollapsed: action.payload };
 
       case "SET_BAND_OFFSET":
-        const adjBandOffset = action.payload * Math.PI;
-        animationValues.current.bandOffset = adjBandOffset
+        const bandOffset = action.payload;
+        animationValues.current.bandOffset = bandOffset
         if (tileLayer.current) {
           tileLayer.current.updateStyleVariables({
-            bandOffset: adjBandOffset,
+            bandOffset: bandOffset,
           });
         }
         if (state.bandHueSpeed != 1) {
