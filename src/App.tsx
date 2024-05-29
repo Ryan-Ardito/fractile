@@ -43,12 +43,12 @@ function App() {
   }, []);
 
   const animateColor: FrameRequestCallback = (timestamp) => {
-    const frameDuration = animationValues.current.frameDuration;
     if (!prevFrameTime.current) {
       prevFrameTime.current = timestamp;
     }
     const elapsed = timestamp - prevFrameTime.current;
     prevFrameTime.current = timestamp;
+    const frameDuration = animationValues.current.frameDuration;
     const framesPassed = elapsed / frameDuration;
     const bandHueSpeed = animationValues.current.bandHueSpeed;
 

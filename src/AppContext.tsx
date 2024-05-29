@@ -74,7 +74,7 @@ const DEFAULT_VALUES: AnimationValues = {
   isAnimating: false,
   bandOffset: 0,
   hueOffset: 0,
-  frameDuration: 60000 / 128,
+  frameDuration: 60000 / 64,
   bandHueSpeed: 0.5,
 };
 
@@ -213,7 +213,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
       menuCollapsed: true,
       bandOffset: 0,
       hueOffset: 0,
-      animationSpeed: 128,
+      animationSpeed: 64,
       paletteScale: 5,
       bandSpacing: 3,
       bandContrast: 0.28,
