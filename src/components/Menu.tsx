@@ -42,7 +42,7 @@ export const Menu = () => {
           {animateButtonText}
         </button>
         <label>
-          {"animation speed"}: {controlValues.animationSpeed} bpm
+          animation speed: {controlValues.animationSpeed} bpm
           <input
             type="range"
             id="animationSpeed"
@@ -83,7 +83,7 @@ export const Menu = () => {
           />
         </label>
         <label>
-          {"palette scale"}: {controlValues.paletteScale}
+          palette scale: {controlValues.paletteScale}
           <input
             type="range"
             id="paletteScale"
@@ -102,7 +102,7 @@ export const Menu = () => {
           />
         </label>
         <label>
-          {"band spacing"}: {controlValues.bandSpacing}
+          band spacing: {controlValues.bandSpacing}
           <input
             type="range"
             id="bandSpacing"
@@ -121,7 +121,7 @@ export const Menu = () => {
           />
         </label>
         <label>
-          {"band contrast"}: {controlValues.bandContrast}
+          band contrast: {controlValues.bandContrast}
           <input
             type="range"
             id="bandContrast"
