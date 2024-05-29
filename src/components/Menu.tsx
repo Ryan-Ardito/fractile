@@ -163,8 +163,8 @@ export const Menu = () => {
             style={{ gridColumn: "span 2" }}
             type="range"
             id="bandOffset"
-            min={-Math.PI}
-            max={Math.PI}
+            min="-3.15"
+            max="3.15"
             step="0.01"
             list="zeroMarker"
             value={controlValues.bandOffset}
