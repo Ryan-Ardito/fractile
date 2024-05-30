@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useAppContext } from "../AppContext";
+import { AnimateDirection, useAppContext } from "../AppContext";
 
 export const Menu = () => {
   const { controlValues, updateControlValues } = useAppContext();
@@ -144,17 +144,25 @@ export const Menu = () => {
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
               onClick={() =>
-                updateControlValues({ type: "SET_BAND_DIRECTION", payload: -1 })
+                updateControlValues({
+                  type: "SET_BAND_DIRECTION",
+                  payload: AnimateDirection.Backward,
+                })
               }
-              disabled={controlValues.bandDirection != 1}
+              disabled={controlValues.bandDirection != AnimateDirection.Forward}
             >
               &lt;
             </button>
             <button
               onClick={() =>
-                updateControlValues({ type: "SET_BAND_DIRECTION", payload: 1 })
+                updateControlValues({
+                  type: "SET_BAND_DIRECTION",
+                  payload: AnimateDirection.Forward,
+                })
               }
-              disabled={controlValues.bandDirection != -1}
+              disabled={
+                controlValues.bandDirection != AnimateDirection.Backward
+              }
             >
               &gt;
             </button>
@@ -186,17 +194,23 @@ export const Menu = () => {
           <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
             <button
               onClick={() =>
-                updateControlValues({ type: "SET_HUE_DIRECTION", payload: -1 })
+                updateControlValues({
+                  type: "SET_HUE_DIRECTION",
+                  payload: AnimateDirection.Backward,
+                })
               }
-              disabled={controlValues.hueDirection != 1}
+              disabled={controlValues.hueDirection != AnimateDirection.Forward}
             >
               &lt;
             </button>
             <button
               onClick={() =>
-                updateControlValues({ type: "SET_HUE_DIRECTION", payload: 1 })
+                updateControlValues({
+                  type: "SET_HUE_DIRECTION",
+                  payload: AnimateDirection.Forward,
+                })
               }
-              disabled={controlValues.hueDirection != -1}
+              disabled={controlValues.hueDirection != AnimateDirection.Backward}
             >
               &gt;
             </button>

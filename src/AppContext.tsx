@@ -8,9 +8,14 @@ import React, {
   useReducer,
 } from "react";
 
+export enum AnimateDirection {
+  Forward = 1,
+  Backward = -1,
+}
+
 type ControlValues = {
-  hueDirection: number;
-  bandDirection: number;
+  hueDirection: AnimateDirection;
+  bandDirection: AnimateDirection;
   isAnimating: boolean;
   menuCollapsed: boolean;
   bandOffset: number;
@@ -25,8 +30,8 @@ type ControlValues = {
 };
 
 type AnimationValues = {
-  hueDirection: number;
-  bandDirection: number;
+  hueDirection: AnimateDirection;
+  bandDirection: AnimateDirection;
   isAnimating: boolean;
   bandOffset: number;
   hueOffset: number;
@@ -69,8 +74,8 @@ type Action =
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const DEFAULT_VALUES: AnimationValues = {
-  hueDirection: -1,
-  bandDirection: 1,
+  hueDirection: AnimateDirection.Backward,
+  bandDirection: AnimateDirection.Forward,
   isAnimating: false,
   bandOffset: 0,
   hueOffset: 0,
@@ -127,7 +132,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 
       case "SET_BAND_OFFSET":
         const bandOffset = action.payload;
-        animationValues.current.bandOffset = bandOffset
+        animationValues.current.bandOffset = bandOffset;
         if (tileLayer.current) {
           tileLayer.current.updateStyleVariables({
             bandOffset: bandOffset,
@@ -207,8 +212,8 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   const [controlValues, updateControlValues] = useReducer(
     controlValuesReducer,
     {
-      hueDirection: -1,
-      bandDirection: 1,
+      hueDirection: AnimateDirection.Backward,
+      bandDirection: AnimateDirection.Forward,
       isAnimating: false,
       menuCollapsed: true,
       bandOffset: 0,
