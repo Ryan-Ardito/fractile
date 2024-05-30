@@ -1,7 +1,7 @@
 {
   "name": "fractile",
   "version": "1.0.0",
-  "homepage": "https://ryan-ardito.github.io/fractile/",
+  "homepage": "https://fractal.party",
   "scripts": {
     "start": "vite",
     "build": "vite build",

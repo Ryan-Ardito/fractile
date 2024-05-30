@@ -1,6 +1,6 @@
 # Mandelbrot Viewer
 
-https://ryan-ardito.github.io/fractile/
+https://fractal.party
 
 ## Controls
 Open the menu in the bottom left for more controls.
