@@ -190,7 +190,7 @@ function App() {
           break;
 
         case "Escape":
-          updateControlValues({ type: "SET_MENU_COLLAPSED", payload: false });
+          updateControlValues({ type: "SET_MENU_COLLAPSED", payload: true });
       }
     };
 
