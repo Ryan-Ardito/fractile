@@ -30,7 +30,8 @@ const loadTile = (z: number, x: number, y: number): Promise<Float32Array> => {
     z += 1e-9;
 
     const worker = new Worker(
-      new URL("../mandelbrotWorker.ts", import.meta.url)
+      new URL("../mandelbrotWorker.ts", import.meta.url),
+      { type: "module" }
     );
 
     worker.onmessage = (e) => {

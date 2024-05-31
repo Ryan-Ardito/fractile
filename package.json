@@ -16,6 +16,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "ol": "latest",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "vite-plugin-wasm-pack": "^0.1.12"
   }
 }
