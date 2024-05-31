@@ -14,10 +14,10 @@ fn is_in_cardioid_or_bulb(x: f64, y: f64) -> bool {
     let in_cardioid = q * (q + (x - 0.25)) < 0.25 * y2;
     let in_bulb = (x + 1.0).powi(2) + y2 < 0.0625;
 
-    return in_cardioid || in_bulb;
+    in_cardioid || in_bulb
 }
 
-fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f32 {
+fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f64 {
     let mut zx = 0.0;
     let mut zy = 0.0;
     let mut x2 = 0.0;
@@ -29,7 +29,7 @@ fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f32 {
     while i < max_iterations {
         for _ in 0..CYCLE_MEMORY_INTERVAL {
             if x2 + y2 > BAILOUT {
-                return (i + 2.0 - (x2 + y2).ln().ln() / 2f64.ln()) as f32;
+                return i + 2.0 - (x2 + y2).ln().ln() / 2f64.ln();
             }
 
             zy = (zx + zx) * zy + cy;
@@ -38,12 +38,10 @@ fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f32 {
             y2 = zy * zy;
             i += 1.0;
 
-            if i >= CYCLE_DETECTION_DELAY {
-                if (zx - cycle_x).abs() < PERIODICITY_THRESHOLD
-                    && (zy - cycle_y).abs() < PERIODICITY_THRESHOLD
-                {
-                    return 0.0;
-                }
+            let x_approx = (zx - cycle_x).abs() < PERIODICITY_THRESHOLD;
+            let y_approx = (zy - cycle_y).abs() < PERIODICITY_THRESHOLD;
+            if i >= CYCLE_DETECTION_DELAY && x_approx && y_approx {
+                return 0.0;
             }
         }
 
@@ -51,7 +49,7 @@ fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f32 {
         cycle_y = zy;
     }
 
-    return 0.0;
+    0.0
 }
 
 #[wasm_bindgen]
@@ -73,9 +71,9 @@ pub fn get_mandelbrot_tile(z: f64, x: f64, y: f64, size: f64, max_iters: f64) ->
                 continue;
             }
 
-            iters_tile[pixel_idx] = escape_time(cx, cy, max_iters);
+            iters_tile[pixel_idx] = escape_time(cx, cy, max_iters) as f32;
         }
     }
 
-    return iters_tile;
+    iters_tile
 }
