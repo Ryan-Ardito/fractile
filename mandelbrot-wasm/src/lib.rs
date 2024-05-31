@@ -25,7 +25,7 @@ fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f64 {
     let mut cycle_x = 0.0;
     let mut cycle_y = 0.0;
 
-    let mut i: f64 = 0.0;
+    let mut i = 0.0;
     while i < max_iterations {
         for _ in 0..CYCLE_MEMORY_INTERVAL {
             if x2 + y2 > BAILOUT {
