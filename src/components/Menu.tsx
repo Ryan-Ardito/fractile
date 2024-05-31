@@ -139,9 +139,17 @@ export const Menu = () => {
             }
           />
         </label>
-        <label style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-          band offset: {controlValues.bandOffset.toFixed(2)}
-          <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+          <label>band offset: {controlValues.bandOffset.toFixed(2)}</label>
+          <div
+            style={{
+              display: "flex",
+              gap: "4px",
+              justifySelf: "end",
+              alignSelf: "end",
+              height: "1.2rem",
+            }}
+          >
             <button
               onClick={() =>
                 updateControlValues({
@@ -185,13 +193,18 @@ export const Menu = () => {
               })
             }
           />
-        </label>
-        <label
-          key={6}
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
-        >
-          hue offset: {controlValues.hueOffset.toFixed(0)}
-          <div style={{ display: "flex", gap: "4px", justifySelf: "end" }}>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+          <label>hue offset: {controlValues.hueOffset.toFixed(0)}</label>
+          <div
+            style={{
+              height: "1.2rem",
+              display: "flex",
+              gap: "4px",
+              justifySelf: "end",
+              alignSelf: "end",
+            }}
+          >
             <button
               onClick={() =>
                 updateControlValues({
@@ -233,7 +246,7 @@ export const Menu = () => {
               })
             }
           />
-        </label>
+        </div>
         <label>
           saturation: {controlValues.saturation}
           <input
