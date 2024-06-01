@@ -72,8 +72,8 @@ export const Menu = () => {
             step="0.005"
             value={controlValues.bandHueSpeed}
             list="bandHueMarkers"
-            ref={(el) => (inputRefs.current[5] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 5)}
+            ref={(el) => (inputRefs.current[1] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 1)}
             onChange={(e) =>
               updateControlValues({
                 type: "SET_BAND_HUE_SPEED",
@@ -91,8 +91,8 @@ export const Menu = () => {
             max="10"
             step="0.01"
             value={controlValues.paletteScale}
-            ref={(el) => (inputRefs.current[1] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 1)}
+            ref={(el) => (inputRefs.current[2] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 2)}
             onChange={(e) =>
               updateControlValues({
                 type: "SET_PALETTE_SCALE",
@@ -110,8 +110,8 @@ export const Menu = () => {
             max="10"
             step="0.005"
             value={controlValues.bandSpacing}
-            ref={(el) => (inputRefs.current[2] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 2)}
+            ref={(el) => (inputRefs.current[3] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 3)}
             onChange={(e) =>
               updateControlValues({
                 type: "SET_BAND_SPACING",
@@ -129,8 +129,8 @@ export const Menu = () => {
             max="0.5"
             step="0.01"
             value={controlValues.bandContrast}
-            ref={(el) => (inputRefs.current[3] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 3)}
+            ref={(el) => (inputRefs.current[4] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 4)}
             onChange={(e) =>
               updateControlValues({
                 type: "SET_BAND_CONTRAST",
@@ -184,8 +184,8 @@ export const Menu = () => {
             step="0.01"
             list="zeroMarker"
             value={controlValues.bandOffset}
-            ref={(el) => (inputRefs.current[4] = el)}
-            onKeyDown={(e) => handleKeyDown(e, 4)}
+            ref={(el) => (inputRefs.current[5] = el)}
+            onKeyDown={(e) => handleKeyDown(e, 5)}
             onChange={(e) =>
               updateControlValues({
                 type: "SET_BAND_OFFSET",
