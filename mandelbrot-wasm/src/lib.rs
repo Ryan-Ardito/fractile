@@ -58,20 +58,19 @@ pub fn get_mandelbrot_tile(z: f64, x: f64, y: f64, size: f64, max_iters: f64) ->
     let offset_x = x * scale + MAP_OFFSET;
     let offset_y = y * scale + MAP_OFFSET;
 
-    let mut iters_tile = vec![0.0; (size * size) as usize];
+    let mut iters_tile = Vec::with_capacity((size * size) as usize);
 
-    for pixel_x in 0..size as i32 {
-        let cx = (pixel_x as f64 * scale) / size + offset_x;
-        for pixel_y in 0..size as i32 {
-            let cy = (pixel_y as f64 * scale) / size + offset_y;
+    for pixel_y in 0..size as i32 {
+        let cy = (pixel_y as f64 * scale) / size + offset_y;
+        for pixel_x in 0..size as i32 {
+            let cx = (pixel_x as f64 * scale) / size + offset_x;
 
-            let pixel_idx = (pixel_y * size as i32 + pixel_x) as usize;
             if is_in_cardioid_or_bulb(cx, cy) {
-                iters_tile[pixel_idx] = 0.0;
+                iters_tile.push(0.0);
                 continue;
             }
 
-            iters_tile[pixel_idx] = escape_time(cx, cy, max_iters) as f32;
+            iters_tile.push(escape_time(cx, cy, max_iters) as f32)
         }
     }
 
