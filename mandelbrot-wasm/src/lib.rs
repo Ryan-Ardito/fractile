@@ -8,6 +8,7 @@ const PERIODICITY_THRESHOLD: f64 = 1e-12;
 const CYCLE_DETECTION_DELAY: f64 = 40.0;
 const CYCLE_MEMORY_INTERVAL: i32 = 20;
 
+#[inline]
 fn is_in_cardioid_or_bulb(x: f64, y: f64) -> bool {
     let y2 = y * y;
     let q = (x - 0.25).powi(2) + y2;
@@ -17,6 +18,7 @@ fn is_in_cardioid_or_bulb(x: f64, y: f64) -> bool {
     in_cardioid || in_bulb
 }
 
+#[inline]
 fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f64 {
     let mut zx = 0.0;
     let mut zy = 0.0;
@@ -38,10 +40,12 @@ fn escape_time(cx: f64, cy: f64, max_iterations: f64) -> f64 {
             y2 = zy * zy;
             i += 1.0;
 
-            let x_approx = (zx - cycle_x).abs() < PERIODICITY_THRESHOLD;
-            let y_approx = (zy - cycle_y).abs() < PERIODICITY_THRESHOLD;
-            if i >= CYCLE_DETECTION_DELAY && x_approx && y_approx {
-                return 0.0;
+            if i >= CYCLE_DETECTION_DELAY {
+                let x_approx = (zx - cycle_x).abs() < PERIODICITY_THRESHOLD;
+                let y_approx = (zy - cycle_y).abs() < PERIODICITY_THRESHOLD;
+                if x_approx && y_approx {
+                    return 0.0;
+                }
             }
         }
 
