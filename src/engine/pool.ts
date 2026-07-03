@@ -51,6 +51,7 @@ export class FractalEngine {
       data: Float32Array,
       iterDone: number,
       maxFinite: number,
+      costMs: number,
       final: boolean
     ) => void,
     poolSize = Math.max(2, (navigator.hardwareConcurrency || 4) - 1)
@@ -206,7 +207,7 @@ export class FractalEngine {
     switch (msg.type) {
       case "tile": {
         this.free(msg.id);
-        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, true);
+        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, true);
         this.pump();
         break;
       }
@@ -214,7 +215,7 @@ export class FractalEngine {
       // Provisional frame from a still-running adaptive escalation: display
       // it, but the worker slot stays busy and the job stays cancellable.
       case "tile-progress":
-        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, false);
+        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, false);
         break;
 
       case "aborted":

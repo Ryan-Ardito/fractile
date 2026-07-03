@@ -29,8 +29,9 @@ Open the menu in the bottom left for more controls.
   rebasing for glitch-free single-reference rendering
 - Hand-rolled WebGL2 tile engine: exact BigInt tile addressing, LRU cache,
   parent-tile fallback, fade-in transitions
-- Caching
-- Preloading
+- Caching (cost-aware eviction: expensive deep tiles survive until RAM
+  pressure forces them out, so deep round trips replay from cache)
+- Preloading (idle workers prewarm the zoom-out corridor level by level)
 - Interpolation
 - Async front end
 - Parallel processing (persistent worker pool)

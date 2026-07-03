@@ -16,7 +16,7 @@ import { parseHash, serializeHash } from "./permalink";
 import { StyleVars, TileHandle, TileRenderer } from "./renderer";
 import { fixedToFloat } from "./fixedPoint";
 
-const TILE_CACHE_MAX = 512;
+const TILE_CACHE_MAX = 768;
 const FADE_MS = 120;
 const MOVEEND_IDLE_MS = 260;
 const ZOOM_EASE_MS = 90;
@@ -51,6 +51,13 @@ const BASE_GRID_LEVEL = 3;
 const PRELOAD_PRIORITY = 1e12;
 const BASE_GRID_PRIORITY = 1e15;
 
+// Zoom-out prewarm: once the view is idle, spend spare worker time computing
+// viewport-sized tile windows at ancestor levels, nearest level first (those
+// are the expensive ones; far-shallower levels recompute in milliseconds if
+// missed). The budget caps both the compute and the cache footprint it pins.
+const PREWARM_PRIORITY = 1e13;
+const PREWARM_TILE_BUDGET = 384;
+
 type CacheEntry = {
   tex: TileHandle;
   loadedAt: number;
@@ -61,6 +68,10 @@ type CacheEntry = {
   // True when this texture is a provisional escalation frame whose job was
   // never seen to finish — re-request it if it comes back into view.
   needsMore: boolean;
+  level: number;
+  // Worker-measured compute cost (ms). Eviction sacrifices cheap tiles first,
+  // so an expensive deep corridor survives a trip to shallow water and back.
+  cost: number;
 };
 type ViewerEvent = "moveend";
 
@@ -76,6 +87,11 @@ export class FractalViewer {
   // Highest iteration count adaptively reached per level; new tiles start here.
   private iterFloor = new Map<number, number>();
   private baseGridTiles: Array<{ key: string; tx: bigint; ty: bigint }> = [];
+  // Tiles the current view considers relevant (visible + parents + base grid
+  // + prewarm corridor) as of the last render — eviction spares these.
+  private lastWanted = new Set<string>();
+  // The planned zoom-out corridor; recomputed at each moveend.
+  private prewarmKeys = new Set<string>();
 
   private raf = 0;
   private dirty = true;
@@ -104,6 +120,7 @@ export class FractalViewer {
       data: Float32Array;
       iterDone: number;
       maxFinite: number;
+      cost: number;
       final: boolean;
     }
   >();
@@ -154,8 +171,9 @@ export class FractalViewer {
     this.moved = true;
     this.lastMoveAt = performance.now();
 
-    this.engine = new FractalEngine((key, data, iterDone, maxFinite, final) =>
-      this.onTile(key, data, iterDone, maxFinite, final)
+    this.engine = new FractalEngine(
+      (key, data, iterDone, maxFinite, cost, final) =>
+        this.onTile(key, data, iterDone, maxFinite, cost, final)
     );
 
     const baseTiles = 1n << BigInt(BASE_GRID_LEVEL);
@@ -292,7 +310,14 @@ export class FractalViewer {
       for (const [key, tile] of this.pendingTiles) {
         if (uploads >= MAX_UPLOADS_PER_FRAME) break;
         this.pendingTiles.delete(key);
-        this.commitTile(key, tile.data, tile.iterDone, tile.maxFinite, tile.final);
+        this.commitTile(
+          key,
+          tile.data,
+          tile.iterDone,
+          tile.maxFinite,
+          tile.cost,
+          tile.final
+        );
         uploads++;
       }
       this.dirty = true;
@@ -344,6 +369,7 @@ export class FractalViewer {
       now - this.lastMoveAt > MOVEEND_IDLE_MS
     ) {
       this.moved = false;
+      this.planPrewarm();
       for (const cb of this.listeners.moveend) cb();
     }
 
@@ -375,6 +401,52 @@ export class FractalViewer {
     );
   }
 
+  // Plan the zoom-out corridor: viewport-sized tile windows centered on the
+  // current view center at each ancestor level, nearest level first, until
+  // the tile budget is spent. Requested at prewarm priority, so workers only
+  // pick them up when nothing interactive is queued; render() keeps the keys
+  // in the wanted set, and the next moveend replans (which also cancels any
+  // no-longer-relevant queued prewarm work via retain).
+  private planPrewarm(): void {
+    this.prewarmKeys.clear();
+    const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
+    const halfX = Math.ceil(((this.cssW * this.dpr) / TILE_SIZE + 1) / 2);
+    const halfY = Math.ceil(((this.cssH * this.dpr) / TILE_SIZE + 1) / 2);
+    const eight = 8n << BigInt(this.camera.bits);
+    let budget = PREWARM_TILE_BUDGET;
+    for (let d = 2; budget > 0; d++) {
+      const level = vis.level - d;
+      if (level <= BASE_GRID_LEVEL) break;
+      const shift = BigInt(this.camera.bits + 4 - level);
+      const ctx = (this.camera.cxFP + eight) >> shift;
+      const cty = (this.camera.cyFP + eight) >> shift;
+      const maxTile = (1n << BigInt(level)) - 1n;
+      const base = this.baseIter(level);
+      const needsRef = level >= PERTURB_MIN_LEVEL;
+      for (let dy = -halfY; dy <= halfY && budget > 0; dy++) {
+        for (let dx = -halfX; dx <= halfX && budget > 0; dx++) {
+          const tx = ctx + BigInt(dx);
+          const ty = cty + BigInt(dy);
+          if (tx < 0n || ty < 0n || tx > maxTile || ty > maxTile) continue;
+          const key = this.tileKey(level, tx, ty);
+          this.prewarmKeys.add(key);
+          budget--;
+          if (this.cache.has(key) || this.pendingTiles.has(key)) continue;
+          this.engine.requestTile({
+            key,
+            level,
+            tx,
+            ty,
+            size: TILE_SIZE,
+            maxIter: this.tileIter(level, tx, ty, base),
+            needsRef,
+            priority: PREWARM_PRIORITY + d * 1e9 + (dx * dx + dy * dy),
+          });
+        }
+      }
+    }
+  }
+
   // Per-tile budget: the level base, raised to the parent tile's measured
   // need when we have it — the child covers a subset of the parent's region,
   // so escape-time continuity makes the parent's max a reliable predictor.
@@ -393,9 +465,10 @@ export class FractalViewer {
     data: Float32Array,
     iterDone: number,
     maxFinite: number,
+    cost: number,
     final: boolean
   ): void {
-    this.pendingTiles.set(key, { data, iterDone, maxFinite, final });
+    this.pendingTiles.set(key, { data, iterDone, maxFinite, cost, final });
     this.dirty = true;
   }
 
@@ -404,11 +477,13 @@ export class FractalViewer {
     data: Float32Array,
     iterDone: number,
     maxFinite: number,
+    cost: number,
     final: boolean
   ): void {
     const existing = this.cache.get(key);
     if (existing) this.renderer.deleteTile(existing.tex);
     const tex = this.renderer.uploadTile(data, TILE_SIZE);
+    const level = levelOfKey(key);
     // Provisional escalation frames swap the texture in place, no re-fade.
     this.cache.set(key, {
       tex,
@@ -416,13 +491,14 @@ export class FractalViewer {
       maxIter: iterDone,
       maxFinite,
       needsMore: !final && iterDone < ITER_HARD_CAP,
+      level,
+      cost,
     });
 
     // Learn this level's iteration need from what the tile actually showed.
     // The measured max finite escape count (plus margin) is the bound above
     // which nothing more resolves — pixels still unresolved at the hard cap
     // are effectively interior and shouldn't inflate the level's floor.
-    const level = levelOfKey(key);
     const need = Math.min(
       ITER_HARD_CAP,
       Math.ceil(maxFinite * ITER_NEED_MARGIN) + ITER_NEED_PAD
@@ -432,13 +508,26 @@ export class FractalViewer {
     }
 
     while (this.cache.size > TILE_CACHE_MAX) {
-      // Evict the least-recently-used unprotected tile; base levels survive
-      // so zooming far out never falls back to a black background.
+      // Eviction order: among tiles that are neither base-level nor relevant
+      // to the current view, sacrifice the cheapest-to-recompute first (ties
+      // to the least recently used) — a deep, expensive corridor survives a
+      // trip to shallow water and back, while distant cheap tiles go
+      // immediately. Fallbacks: LRU non-base, then absolute LRU.
       let evictKey: string | undefined;
-      for (const k of this.cache.keys()) {
-        if (levelOfKey(k) > BASE_PROTECT_LEVEL) {
+      let evictCost = Infinity;
+      for (const [k, e] of this.cache) {
+        if (e.level <= BASE_PROTECT_LEVEL || this.lastWanted.has(k)) continue;
+        if (e.cost < evictCost) {
           evictKey = k;
-          break;
+          evictCost = e.cost;
+        }
+      }
+      if (evictKey === undefined) {
+        for (const [k, e] of this.cache) {
+          if (e.level > BASE_PROTECT_LEVEL) {
+            evictKey = k;
+            break;
+          }
         }
       }
       if (evictKey === undefined) {
@@ -625,7 +714,12 @@ export class FractalViewer {
       }
     }
 
+    // Keep the planned zoom-out corridor alive across renders: retain() must
+    // not cancel its queued jobs, and eviction must not eat its tiles.
+    for (const key of this.prewarmKeys) wanted.add(key);
+
     this.engine.retain(wanted);
+    this.lastWanted = wanted;
     if (fading) this.dirty = true;
   }
 

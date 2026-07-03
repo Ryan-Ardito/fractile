@@ -79,6 +79,7 @@ const maxFiniteOf = (out: Float32Array): number => {
 
 const handleTile = async (msg: TileMsg): Promise<void> => {
   const { id, key, level, tx, ty, size, maxIter, refId } = msg;
+  const t0 = performance.now();
   const out = new Float32Array(size * size);
   const un = makeUnresolvedBuf(size * size);
 
@@ -135,6 +136,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       ranOut: un.count,
       iterDone: budget,
       maxFinite,
+      costMs: performance.now() - t0,
     });
     const next = Math.min(ITER_HARD_CAP, budget * ITER_ESCALATION);
     let write = 0;
@@ -184,6 +186,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       ranOut: un.count,
       iterDone: budget,
       maxFinite,
+      costMs: performance.now() - t0,
     },
     [out.buffer]
   );
