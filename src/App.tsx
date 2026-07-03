@@ -1,14 +1,13 @@
 import { Menu } from "./components/Menu";
 import { AboutInfo } from "./components/AboutInfo";
-import { MapComponent, locationFromHash } from "./components/Map";
+import { MapComponent } from "./components/Map";
 import { useAppContext } from "./AppContext";
 import { useEffect, useRef } from "react";
 
-const BASE_NUDGE = 156543.03392804096;
 const MOUSE_HIDE_DELAY = 1000;
 
 function App() {
-  const { fractalMap, animationValues, controlValues, updateControlValues } =
+  const { viewer, animationValues, controlValues, updateControlValues } =
     useAppContext();
   const prevFrameTime = useRef<number | undefined>();
   const frameId = useRef<number | undefined>();
@@ -103,25 +102,22 @@ function App() {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      const mapView = fractalMap.current?.getView();
-      const zoom = mapView?.getZoom();
       const menuCollapsed = controlValues.menuCollapsed;
-
-      if (!mapView || !zoom || !menuCollapsed) {
+      if (!viewer.current || !menuCollapsed) {
         return;
       }
       switch (event.key) {
         case "ArrowUp":
-          mapView.adjustCenter([0, BASE_NUDGE / Math.pow(2, zoom)]);
+          viewer.current.panPixels(0, -1);
           break;
         case "ArrowDown":
-          mapView.adjustCenter([0, (-1 * BASE_NUDGE) / Math.pow(2, zoom)]);
+          viewer.current.panPixels(0, 1);
           break;
         case "ArrowRight":
-          mapView.adjustCenter([BASE_NUDGE / Math.pow(2, zoom), 0]);
+          viewer.current.panPixels(1, 0);
           break;
         case "ArrowLeft":
-          mapView.adjustCenter([(-1 * BASE_NUDGE) / Math.pow(2, zoom), 0]);
+          viewer.current.panPixels(-1, 0);
           break;
       }
     };
@@ -134,51 +130,34 @@ function App() {
 
   const shouldUpdate = useRef(false);
   useEffect(() => {
-    const mapView = fractalMap.current?.getView();
+    const v = viewer.current;
+    if (!v) return;
+
     const updatePermalink = () => {
       if (!shouldUpdate.current) {
         shouldUpdate.current = true;
         return;
       }
-
-      const center = mapView?.getCenter();
-      const zoom = mapView?.getZoom();
-      if (!center || !mapView || !zoom) {
-        return;
-      }
-
-      const hash = `#map=${zoom.toString()}/${center[0].toString()}/${center[1].toString()}`;
-      const state = {
-        zoom: mapView.getZoom(),
-        center: mapView.getCenter(),
-      };
-
-      window.history.replaceState(state, "map", hash);
+      const hash = v.getHash();
+      window.history.replaceState({ hash }, "map", hash);
     };
 
     const handleHashChange = (e: HashChangeEvent) => {
-      if (!mapView) return;
       try {
         const url = e.newURL;
         const hash = url.substring(url.indexOf("#"));
-        const [zoom, center] = locationFromHash(hash);
-        mapView.setZoom(zoom);
-        mapView.setCenter(center);
-        const state = {
-          zoom: mapView.getZoom(),
-          center: mapView.getCenter(),
-        };
-
-        window.history.replaceState(state, "map", hash);
+        v.applyHash(hash);
+        window.history.replaceState({ hash }, "map", hash);
       } catch {}
     };
 
     const handlePopState = (e: PopStateEvent) => {
-      if (e.state === null || !mapView) {
+      if (e.state === null || !e.state.hash) {
         return;
       }
-      mapView.setCenter(e.state.center);
-      mapView.setZoom(e.state.zoom);
+      try {
+        v.applyHash(e.state.hash);
+      } catch {}
       shouldUpdate.current = false;
     };
 
@@ -194,20 +173,13 @@ function App() {
       }
     };
 
-    if (window.location.hash && mapView) {
-      try {
-        const [zoom, center] = locationFromHash(window.location.hash);
-        mapView.setZoom(zoom);
-        mapView.setCenter(center);
-      } catch {}
-    }
-
-    fractalMap.current?.on("moveend", updatePermalink);
-    window.onpopstate = handlePopState;
+    v.on("moveend", updatePermalink);
+    window.addEventListener("popstate", handlePopState);
     window.addEventListener("hashchange", handleHashChange);
     document.addEventListener("keydown", handleKey);
     return () => {
-      window.onpopstate = null;
+      v.off("moveend", updatePermalink);
+      window.removeEventListener("popstate", handlePopState);
       window.removeEventListener("hashchange", handleHashChange);
       document.removeEventListener("keydown", handleKey);
     };

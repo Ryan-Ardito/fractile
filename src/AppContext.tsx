@@ -1,5 +1,3 @@
-import { Map } from "ol";
-import TileLayer from "ol/layer/WebGLTile";
 import React, {
   createContext,
   useContext,
@@ -7,6 +5,7 @@ import React, {
   useRef,
   useReducer,
 } from "react";
+import { FractalViewer } from "./engine/viewer";
 
 export enum AnimateDirection {
   Forward = 1,
@@ -40,8 +39,7 @@ type AnimationValues = {
 };
 
 type AppContextType = {
-  fractalMap: React.MutableRefObject<Map | undefined>;
-  tileLayer: React.MutableRefObject<TileLayer | undefined>;
+  viewer: React.MutableRefObject<FractalViewer | undefined>;
   controlValues: ControlValues;
   updateControlValues: React.Dispatch<Action>;
   animationValues: React.MutableRefObject<AnimationValues>;
@@ -84,8 +82,7 @@ const DEFAULT_VALUES: AnimationValues = {
 };
 
 export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
-  const fractalMap = useRef<Map | undefined>(undefined);
-  const tileLayer = useRef<TileLayer | undefined>(undefined);
+  const viewer = useRef<FractalViewer | undefined>(undefined);
 
   const animationValues = useRef(DEFAULT_VALUES);
 
@@ -97,12 +94,10 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
       case "UPDATE_ANIMATION":
         const newBandOffset = action.payload.newBandOffset;
         const newHueOffset = action.payload.newHueOffset;
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            bandOffset: newBandOffset,
-            hueOffset: newHueOffset,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          bandOffset: newBandOffset,
+          hueOffset: newHueOffset,
+        });
         return {
           ...state,
           bandOffset: newBandOffset,
@@ -133,11 +128,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
       case "SET_BAND_OFFSET":
         const bandOffset = action.payload;
         animationValues.current.bandOffset = bandOffset;
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            bandOffset: bandOffset,
-          });
-        }
+        viewer.current?.updateStyleVariables({ bandOffset });
         if (state.bandHueSpeed != 1) {
           return { ...state, isAnimating: false, bandOffset: action.payload };
         }
@@ -145,11 +136,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 
       case "SET_HUE_OFFSET":
         animationValues.current.hueOffset = action.payload;
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            hueOffset: action.payload,
-          });
-        }
+        viewer.current?.updateStyleVariables({ hueOffset: action.payload });
         if (state.bandHueSpeed != 0) {
           return { ...state, isAnimating: false, hueOffset: action.payload };
         }
@@ -161,28 +148,22 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
 
       case "SET_PALETTE_SCALE":
         const adjPaletteScale = 1 / 2 ** (action.payload - 5);
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            paletteScale: adjPaletteScale,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          paletteScale: adjPaletteScale,
+        });
         return { ...state, paletteScale: action.payload };
 
       case "SET_BAND_SPACING":
         const adjBandSpacing = 1 / 2 ** action.payload;
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            bandSpacing: adjBandSpacing,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          bandSpacing: adjBandSpacing,
+        });
         return { ...state, bandSpacing: action.payload };
 
       case "SET_BAND_CONTRAST":
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            bandContrast: action.payload,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          bandContrast: action.payload,
+        });
         return { ...state, bandContrast: action.payload };
 
       case "SET_BAND_HUE_SPEED":
@@ -190,19 +171,15 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
         return { ...state, bandHueSpeed: action.payload };
 
       case "SET_SATURATION":
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            saturation: action.payload,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          saturation: action.payload,
+        });
         return { ...state, saturation: action.payload };
 
       case "SET_LIGHTNESS":
-        if (tileLayer.current) {
-          tileLayer.current.updateStyleVariables({
-            lightness: action.payload,
-          });
-        }
+        viewer.current?.updateStyleVariables({
+          lightness: action.payload,
+        });
         return { ...state, lightness: action.payload };
       default:
         return state;
@@ -231,8 +208,7 @@ export const AppProvider: React.FC<AnimationProviderProps> = ({ children }) => {
   return (
     <AppContext.Provider
       value={{
-        fractalMap,
-        tileLayer,
+        viewer,
         controlValues,
         updateControlValues,
         animationValues,
