@@ -94,6 +94,10 @@ export class FractalViewer {
   private lastWanted = new Set<string>();
   // The planned zoom-out corridor; recomputed at each moveend.
   private prewarmKeys = new Set<string>();
+  // The central-column subset of the corridor (one tile per ancestor level,
+  // straight up): the most protected cache tier — breadth goes first.
+  private centerKeys = new Set<string>();
+  private lastLevel = 0;
 
   private raf = 0;
   private dirty = true;
@@ -403,50 +407,122 @@ export class FractalViewer {
     );
   }
 
-  // Plan the zoom-out corridor: viewport-sized tile windows centered on the
-  // current view center at each ancestor level, nearest level first, until
-  // the tile budget is spent. Requested at prewarm priority, so workers only
-  // pick them up when nothing interactive is queued; render() keeps the keys
-  // in the wanted set, and the next moveend replans (which also cancels any
+  // Plan the zoom-out corridor in two passes: first the CENTRAL tile at
+  // every ancestor level all the way up (a zoom-out is anchored at the
+  // screen center, so this guarantees the middle of the view is sharp at
+  // every level however far out the user flies), then viewport-sized
+  // windows around the center with whatever budget remains, nearest level
+  // first. Requested at prewarm priority, so workers only pick them up when
+  // nothing interactive is queued; render() keeps the keys in the wanted
+  // set, and the next moveend replans (which also cancels any
   // no-longer-relevant queued prewarm work via retain).
   private planPrewarm(): void {
     this.prewarmKeys.clear();
+    this.centerKeys.clear();
     const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
     const halfX = Math.ceil(((this.cssW * this.dpr) / TILE_SIZE + 1) / 2);
     const halfY = Math.ceil(((this.cssH * this.dpr) / TILE_SIZE + 1) / 2);
     const eight = 8n << BigInt(this.camera.bits);
     let budget = PREWARM_TILE_BUDGET;
+
+    const addTile = (
+      level: number,
+      dx: number,
+      dy: number,
+      priority: number
+    ): void => {
+      const shift = BigInt(this.camera.bits + 4 - level);
+      const tx = ((this.camera.cxFP + eight) >> shift) + BigInt(dx);
+      const ty = ((this.camera.cyFP + eight) >> shift) + BigInt(dy);
+      const maxTile = (1n << BigInt(level)) - 1n;
+      if (tx < 0n || ty < 0n || tx > maxTile || ty > maxTile) return;
+      const key = this.tileKey(level, tx, ty);
+      if (this.prewarmKeys.has(key)) return;
+      this.prewarmKeys.add(key);
+      budget--;
+      if (this.cache.has(key) || this.pendingTiles.has(key)) return;
+      if (this.trySynthesize(level, tx, ty)) return;
+      this.engine.requestTile({
+        key,
+        level,
+        tx,
+        ty,
+        size: TILE_SIZE,
+        maxIter: this.tileIter(level, tx, ty, this.baseIter(level)),
+        needsRef: level >= PERTURB_MIN_LEVEL,
+        priority,
+      });
+    };
+
+    // Pass 1: the central column, depth-first to the base grid.
     for (let d = 2; budget > 0; d++) {
       const level = vis.level - d;
       if (level <= BASE_GRID_LEVEL) break;
+      addTile(level, 0, 0, PREWARM_PRIORITY + d * 1e6);
       const shift = BigInt(this.camera.bits + 4 - level);
-      const ctx = (this.camera.cxFP + eight) >> shift;
-      const cty = (this.camera.cyFP + eight) >> shift;
-      const maxTile = (1n << BigInt(level)) - 1n;
-      const base = this.baseIter(level);
-      const needsRef = level >= PERTURB_MIN_LEVEL;
+      this.centerKeys.add(
+        this.tileKey(
+          level,
+          (this.camera.cxFP + eight) >> shift,
+          (this.camera.cyFP + eight) >> shift
+        )
+      );
+    }
+    // Pass 2: breadth around the center, nearest level first. Window tiles
+    // rank strictly after every column tile.
+    for (let d = 2; budget > 0; d++) {
+      const level = vis.level - d;
+      if (level <= BASE_GRID_LEVEL) break;
       for (let dy = -halfY; dy <= halfY && budget > 0; dy++) {
         for (let dx = -halfX; dx <= halfX && budget > 0; dx++) {
-          const tx = ctx + BigInt(dx);
-          const ty = cty + BigInt(dy);
-          if (tx < 0n || ty < 0n || tx > maxTile || ty > maxTile) continue;
-          const key = this.tileKey(level, tx, ty);
-          this.prewarmKeys.add(key);
-          budget--;
-          if (this.cache.has(key) || this.pendingTiles.has(key)) continue;
-          this.engine.requestTile({
-            key,
+          addTile(
             level,
-            tx,
-            ty,
-            size: TILE_SIZE,
-            maxIter: this.tileIter(level, tx, ty, base),
-            needsRef,
-            priority: PREWARM_PRIORITY + d * 1e9 + (dx * dx + dy * dy),
-          });
+            dx,
+            dy,
+            PREWARM_PRIORITY + 1e10 + d * 1e9 + (dx * dx + dy * dy)
+          );
         }
       }
     }
+  }
+
+  // If a tile is entirely covered by its four cached children, build it by
+  // GPU-subsampling them instead of computing it — microseconds instead of
+  // a worker job. Synthesized tiles carry near-zero cost, so eviction sheds
+  // them first; resynthesis is nearly free while the children live.
+  private trySynthesize(level: number, tx: bigint, ty: bigint): boolean {
+    const kids: CacheEntry[] = [];
+    for (let j = 0n; j <= 1n; j++) {
+      for (let i = 0n; i <= 1n; i++) {
+        const kid = this.cache.get(
+          this.tileKey(level + 1, tx * 2n + i, ty * 2n + j)
+        );
+        if (!kid || kid.needsMore) return false;
+        kids.push(kid);
+      }
+    }
+    const tex = this.renderer.synthesizeTile([
+      kids[0].tex,
+      kids[1].tex,
+      kids[2].tex,
+      kids[3].tex,
+    ]);
+    if (!tex) return false;
+    // Diagnostic: visible in the console as window.__fractileSynth.
+    (globalThis as { __fractileSynth?: number }).__fractileSynth =
+      ((globalThis as { __fractileSynth?: number }).__fractileSynth ?? 0) + 1;
+    this.cache.set(this.tileKey(level, tx, ty), {
+      tex,
+      loadedAt: performance.now(),
+      maxIter: Math.min(...kids.map((k) => k.maxIter)),
+      maxFinite: Math.max(...kids.map((k) => k.maxFinite)),
+      needsMore: false,
+      level,
+      cost: 0.1,
+    });
+    this.evictOverflow();
+    this.dirty = true;
+    return true;
   }
 
   // Per-tile budget: the level base, raised to the parent tile's measured
@@ -509,12 +585,19 @@ export class FractalViewer {
       this.iterFloor.set(level, need);
     }
 
+    this.evictOverflow();
+    this.dirty = true;
+  }
+
+  private evictOverflow(): void {
     while (this.cache.size > TILE_CACHE_MAX) {
-      // Eviction order: among tiles that are neither base-level nor relevant
-      // to the current view, sacrifice the cheapest-to-recompute first (ties
-      // to the least recently used) — a deep, expensive corridor survives a
-      // trip to shallow water and back, while distant cheap tiles go
-      // immediately. Fallbacks: LRU non-base, then absolute LRU.
+      // Eviction tiers, most expendable first:
+      //  1. Tiles irrelevant to the current view — cheapest-to-recompute
+      //     first, so a deep expensive corridor survives a trip to shallow
+      //     water and back while distant cheap tiles go immediately.
+      //  2. Relevant BREADTH (window prewarm, parents) — the central column
+      //     and the visible level are spared until nothing else remains.
+      //  3. LRU among non-base tiles, then absolute LRU.
       let evictKey: string | undefined;
       let evictCost = Infinity;
       for (const [k, e] of this.cache) {
@@ -522,6 +605,21 @@ export class FractalViewer {
         if (e.cost < evictCost) {
           evictKey = k;
           evictCost = e.cost;
+        }
+      }
+      if (evictKey === undefined) {
+        for (const [k, e] of this.cache) {
+          if (
+            e.level <= BASE_PROTECT_LEVEL ||
+            e.level === this.lastLevel ||
+            this.centerKeys.has(k)
+          ) {
+            continue;
+          }
+          if (e.cost < evictCost) {
+            evictKey = k;
+            evictCost = e.cost;
+          }
         }
       }
       if (evictKey === undefined) {
@@ -578,6 +676,7 @@ export class FractalViewer {
     this.renderer.begin(this.canvas.width, this.canvas.height);
 
     const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
+    this.lastLevel = vis.level;
     const maxIter = this.baseIter(vis.level);
     const needsRef = vis.level >= PERTURB_MIN_LEVEL;
     if (needsRef) {
@@ -598,7 +697,10 @@ export class FractalViewer {
     for (const t of vis.tiles) {
       const key = this.tileKey(vis.level, t.tx, t.ty);
       wanted.add(key);
-      const entry = this.touch(key);
+      let entry = this.touch(key);
+      if (!entry && this.trySynthesize(vis.level, t.tx, t.ty)) {
+        entry = this.touch(key);
+      }
       const xDev = t.x * dpr;
       const yDev = t.y * dpr;
       const alpha = entry ? Math.min(1, (now - entry.loadedAt) / FADE_MS) : 0;
@@ -667,7 +769,7 @@ export class FractalViewer {
         if (parents.has(key)) continue;
         parents.add(key);
         wanted.add(key);
-        if (!this.cache.has(key)) {
+        if (!this.cache.has(key) && !this.trySynthesize(parentLevel, ptx, pty)) {
           this.engine.requestTile({
             key,
             level: parentLevel,

@@ -35,7 +35,10 @@ Open the menu in the bottom left for more controls.
   parent-tile fallback, fade-in transitions
 - Caching (cost-aware eviction: expensive deep tiles survive until RAM
   pressure forces them out, so deep round trips replay from cache)
-- Preloading (idle workers prewarm the zoom-out corridor level by level)
+- Preloading (idle workers prewarm the zoom-out corridor: the central tile
+  at every ancestor level first, then viewport-wide windows)
+- Tile synthesis: a tile fully covered by its four cached children is built
+  by GPU-subsampling them — microseconds instead of a worker computation
 - Interpolation
 - Async front end
 - Parallel processing (persistent worker pool)

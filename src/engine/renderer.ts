@@ -113,6 +113,22 @@ void main() {
   outColor = vec4(clamp(rgb + m, 0.0, 1.0), 1.0);
 }`;
 
+// Build a parent tile's escape-time data by 2:1 subsampling a child tile
+// into one quadrant of the target. Point sampling (no averaging): averaging
+// iteration values across an interior/exterior discontinuity would fabricate
+// values that exist nowhere; the cost is a fixed quarter-pixel sampling
+// offset, which is invisible.
+const SUBSAMPLE_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uData;
+uniform ivec2 uQuadOrigin; // this child's quadrant origin, in target texels
+out vec4 outColor;
+void main() {
+  ivec2 ct = (ivec2(gl_FragCoord.xy) - uQuadOrigin) * 2;
+  int hi = textureSize(uData, 0).x - 1;
+  outColor = vec4(texelFetch(uData, clamp(ct, ivec2(0), ivec2(hi)), 0).r, 0.0, 0.0, 1.0);
+}`;
+
 const COMPOSITE_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uColor;
@@ -170,13 +186,18 @@ export class TileRenderer {
   private gl: WebGL2RenderingContext;
   private paletteProg: WebGLProgram;
   private compositeProg: WebGLProgram;
+  private subsampleProg: WebGLProgram;
   private paletteUni: Map<string, WebGLUniformLocation | null> = new Map();
   private compUni: Map<string, WebGLUniformLocation | null> = new Map();
+  private subUni: Map<string, WebGLUniformLocation | null> = new Map();
   private fbo: WebGLFramebuffer;
   private style: StyleVars | null = null;
   private styleVersion = 0;
   private viewportW = 0;
   private viewportH = 0;
+  // Rendering INTO an R32F texture needs this extension; without it tile
+  // synthesis is silently unavailable and callers fall back to computing.
+  private canSynthesize: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", {
@@ -190,12 +211,17 @@ export class TileRenderer {
 
     this.paletteProg = link(gl, PALETTE_FRAG);
     this.compositeProg = link(gl, COMPOSITE_FRAG);
+    this.subsampleProg = link(gl, SUBSAMPLE_FRAG);
     for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData"]) {
       this.paletteUni.set(name, gl.getUniformLocation(this.paletteProg, name));
     }
     for (const name of ["uRect", "uViewport", "uTexRect", "uAlpha", "uColor"]) {
       this.compUni.set(name, gl.getUniformLocation(this.compositeProg, name));
     }
+    for (const name of ["uRect", "uViewport", "uData", "uQuadOrigin"]) {
+      this.subUni.set(name, gl.getUniformLocation(this.subsampleProg, name));
+    }
+    this.canSynthesize = !!gl.getExtension("EXT_color_buffer_float");
 
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -240,6 +266,55 @@ export class TileRenderer {
   deleteTile(handle: TileHandle): void {
     this.gl.deleteTexture(handle.dataTex);
     if (handle.colorTex) this.gl.deleteTexture(handle.colorTex);
+  }
+
+  // Build a parent tile's data texture by 2:1 subsampling its four cached
+  // children — entirely on the GPU, no worker compute and no readback.
+  // Children in row-major quadrant order: [(0,0), (1,0), (0,1), (1,1)],
+  // where (i, j) covers the parent's texel block starting at (i·s/2, j·s/2)
+  // (j is the py/imaginary axis, increasing downward like tile rows).
+  synthesizeTile(
+    children: [TileHandle, TileHandle, TileHandle, TileHandle]
+  ): TileHandle | null {
+    if (!this.canSynthesize) return null;
+    const gl = this.gl;
+    const size = children[0].size;
+    const dataTex = gl.createTexture();
+    if (!dataTex) return null;
+    gl.bindTexture(gl.TEXTURE_2D, dataTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dataTex, 0
+    );
+    gl.viewport(0, 0, size, size);
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.subsampleProg);
+    gl.uniform2f(this.subUni.get("uViewport") ?? null, size, size);
+    gl.uniform1i(this.subUni.get("uData") ?? null, 0);
+    const h = size >> 1;
+    for (let j = 0; j <= 1; j++) {
+      for (let i = 0; i <= 1; i++) {
+        gl.bindTexture(gl.TEXTURE_2D, children[i + 2 * j].dataTex);
+        // QUAD_VERT flips y for screen rendering, so a rect at y = h - j·h
+        // lands on FBO texel rows [j·h, j·h + h).
+        gl.uniform4f(this.subUni.get("uRect") ?? null, i * h, h - j * h, h, h);
+        gl.uniform2i(this.subUni.get("uQuadOrigin") ?? null, i * h, j * h);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+    }
+
+    // Restore composite state.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.viewportW, this.viewportH);
+    gl.enable(gl.BLEND);
+    gl.useProgram(this.compositeProg);
+    return { dataTex, colorTex: null, colorVersion: -1, size };
   }
 
   begin(wDev: number, hDev: number): void {
