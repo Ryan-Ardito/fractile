@@ -13,9 +13,22 @@ import { fixedToFloat, fixedMul } from "./fixedPoint";
 const LN_2 = Math.log(2);
 
 export const BAILOUT = 24;
-const PERIODICITY_THRESHOLD = 1e-12;
-const CYCLE_DETECTION_DELAY = 40;
-const CYCLE_MEMORY_INTERVAL = 20;
+
+// Interior detection is a hyperbolicity test: track the squared magnitude of
+// the accumulated orbit derivative e = ∏ 2·z_i (skipping z_0 = 0). A point is
+// interior iff its orbit is attracted to a cycle with multiplier |μ| < 1, in
+// which case |e|² decays geometrically per period; exterior points shadow
+// cycles with |μ| ≥ 1 and don't decay. Because |e|² also dips arbitrarily low
+// WITHIN a period (cycles near minibrots pass close to z = 0), the verdict
+// compares the RUNNING MAXIMUM over doubling windows — once a window spans a
+// full period, interior maxima collapse and exterior maxima never do. Unlike
+// anchor-comparison periodicity checks (whose absolute epsilon falsely fires
+// on near-cycle lingering once features shrink below it — black flames around
+// deep minibrots), this is scale-independent at any depth and detects
+// attracting cycles of any period.
+const INTERIOR_E2 = 1e-12;
+const INTERIOR_FIRST_CHECK = 64;
+const E2_CLAMP = 1e60;
 
 export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
   const y2 = cy * cy;
@@ -29,46 +42,49 @@ export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
 // left here so the caller can resume it later with a bigger budget instead of
 // recomputing from zero. ax/ay hold z (direct) or dz (perturbation); m is the
 // perturbation orbit index; n is the iteration the pixel actually reached
-// (below the budget when a truncated reference parked it early).
+// (below the budget when a truncated reference parked it early); e2 is the
+// interior-detection derivative magnitude.
 // Single-threaded module state: rows are computed synchronously, so this
 // never aliases between pixels.
-export const pixelState = { ax: 0, ay: 0, m: 0, n: 0 };
+export const pixelState = { ax: 0, ay: 0, m: 0, n: 0, e2: 1 };
 
 // Escape-time returns: smooth iteration count (> 0) on escape, 0 for
-// confirmed interior (cycle detected), -1 when maxIters ran out without a
-// verdict (resume state saved in pixelState). Pass n0/szx/szy from a previous
-// -1 to continue that pixel where it stopped.
+// confirmed interior (attracting-cycle test), -1 when maxIters ran out
+// without a verdict (resume state saved in pixelState). Pass state from a
+// previous -1 to continue that pixel where it stopped.
 export const escapeTime = (
   cx: number,
   cy: number,
   maxIters: number,
   n0 = 0,
   szx = 0,
-  szy = 0
+  szy = 0,
+  se2 = 1
 ): number => {
   let zx = szx;
   let zy = szy;
   let x2 = zx * zx;
   let y2 = zy * zy;
-  let cycleX = 0;
-  let cycleY = 0;
+  let e2 = se2;
+  let e2Max = 0;
+  let nextCheck = INTERIOR_FIRST_CHECK;
+  while (nextCheck <= n0) nextCheck *= 2;
 
   for (let n = n0; n < maxIters; n++) {
-    if (x2 + y2 > BAILOUT) {
-      return n + 2 - Math.log(Math.log(x2 + y2)) / LN_2;
+    const zMag = x2 + y2;
+    if (zMag > BAILOUT) {
+      return n + 2 - Math.log(Math.log(zMag)) / LN_2;
     }
 
-    // Anchor also resets at n0: a resumed segment must never compare against
-    // the zero-initialized anchor (a near-origin z would false-positive).
-    if (n === n0 || n % CYCLE_MEMORY_INTERVAL === 0) {
-      cycleX = zx;
-      cycleY = zy;
-    } else if (
-      n >= CYCLE_DETECTION_DELAY &&
-      Math.abs(zx - cycleX) < PERIODICITY_THRESHOLD &&
-      Math.abs(zy - cycleY) < PERIODICITY_THRESHOLD
-    ) {
-      return 0;
+    if (n !== 0) {
+      e2 *= 4 * zMag;
+      if (e2 > E2_CLAMP) e2 = E2_CLAMP;
+      if (e2 > e2Max) e2Max = e2;
+      if (n >= nextCheck) {
+        if (e2Max < INTERIOR_E2) return 0;
+        e2Max = 0;
+        while (nextCheck <= n) nextCheck *= 2;
+      }
     }
 
     zy = (zx + zx) * zy + cy;
@@ -81,6 +97,7 @@ export const escapeTime = (
   pixelState.ay = zy;
   pixelState.m = 0;
   pixelState.n = maxIters;
+  pixelState.e2 = e2;
   return -1;
 };
 
@@ -134,7 +151,8 @@ export const perturbPixel = (
   sdzx = 0,
   sdzy = 0,
   sm = 0,
-  bla: BlaTable | null = null
+  bla: BlaTable | null = null,
+  se2 = 1
 ): number => {
   const orbitLen = orbit.length >> 1;
   // Wrapping at the orbit end is only sound when the orbit ended by ESCAPE:
@@ -151,8 +169,10 @@ export const perturbPixel = (
   let dzx = sdzx;
   let dzy = sdzy;
   let m = sm;
-  let cycleX = 0;
-  let cycleY = 0;
+  let e2 = se2;
+  let e2Max = 0;
+  let nextCheck = INTERIOR_FIRST_CHECK;
+  while (nextCheck <= n0) nextCheck *= 2;
 
   for (let n = n0; n < maxIter; n++) {
     let refX = orbit[2 * m];
@@ -164,17 +184,15 @@ export const perturbPixel = (
       return n + 2 - Math.log(Math.log(zMag)) / LN_2;
     }
 
-    // Anchor also resets at n0: a resumed segment must never compare against
-    // the zero-initialized anchor (a near-origin z would false-positive).
-    if (n === n0 || n % CYCLE_MEMORY_INTERVAL === 0) {
-      cycleX = zx;
-      cycleY = zy;
-    } else if (
-      n >= CYCLE_DETECTION_DELAY &&
-      Math.abs(zx - cycleX) < PERIODICITY_THRESHOLD &&
-      Math.abs(zy - cycleY) < PERIODICITY_THRESHOLD
-    ) {
-      return 0;
+    if (n !== 0) {
+      e2 *= 4 * zMag;
+      if (e2 > E2_CLAMP) e2 = E2_CLAMP;
+      if (e2 > e2Max) e2Max = e2;
+      if (n >= nextCheck) {
+        if (e2Max < INTERIOR_E2) return 0;
+        e2Max = 0;
+        while (nextCheck <= n) nextCheck *= 2;
+      }
     }
 
     if (m + 1 >= orbitLen) {
@@ -184,6 +202,7 @@ export const perturbPixel = (
         pixelState.ay = dzy;
         pixelState.m = m;
         pixelState.n = n;
+        pixelState.e2 = e2;
         return -1;
       }
       dzx = zx;
@@ -229,6 +248,11 @@ export const perturbPixel = (
         const nx = axv * dzx - ayv * dzy + bxv * dcx - byv * dcy;
         dzy = axv * dzy + ayv * dzx + bxv * dcy + byv * dcx;
         dzx = nx;
+        // The block's A is the accumulated derivative across it (to within
+        // the validity tolerance), so the interior test rides along free.
+        e2 *= axv * axv + ayv * ayv;
+        if (e2 > E2_CLAMP) e2 = E2_CLAMP;
+        if (e2 > e2Max) e2Max = e2;
         m += lv.len;
         n += lv.len - 1; // the loop increment supplies the last one
         skipped = true;
@@ -249,6 +273,7 @@ export const perturbPixel = (
   pixelState.ay = dzy;
   pixelState.m = m;
   pixelState.n = maxIter;
+  pixelState.e2 = e2;
   return -1;
 };
 
@@ -270,6 +295,7 @@ export type UnresolvedBuf = {
   ay: Float64Array;
   m: Int32Array;
   n: Int32Array;
+  e2: Float64Array;
 };
 
 export const makeUnresolvedBuf = (capacity: number): UnresolvedBuf => ({
@@ -279,6 +305,7 @@ export const makeUnresolvedBuf = (capacity: number): UnresolvedBuf => ({
   ay: new Float64Array(capacity),
   m: new Int32Array(capacity),
   n: new Int32Array(capacity),
+  e2: new Float64Array(capacity),
 });
 
 const recordUnresolved = (un: UnresolvedBuf, idx: number): void => {
@@ -287,6 +314,7 @@ const recordUnresolved = (un: UnresolvedBuf, idx: number): void => {
   un.ay[un.count] = pixelState.ay;
   un.m[un.count] = pixelState.m;
   un.n[un.count] = pixelState.n;
+  un.e2[un.count] = pixelState.e2;
   un.count++;
 };
 

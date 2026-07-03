@@ -177,14 +177,15 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       const cx = x0 + (px + 0.5) * step;
       const cy = y0 + (py + 0.5) * step;
       const v = orbit
-        ? perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla)
-        : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i]);
+        ? perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
+        : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i], un.e2[i]);
       if (v < 0) {
         un.idx[write] = idx;
         un.ax[write] = pixelState.ax;
         un.ay[write] = pixelState.ay;
         un.m[write] = pixelState.m;
         un.n[write] = pixelState.n;
+        un.e2[write] = pixelState.e2;
         write++;
       } else {
         out[idx] = v;

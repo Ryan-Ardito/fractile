@@ -44,6 +44,10 @@ Open the menu in the bottom left for more controls.
 - Adaptive iterations: workers keep iterating just the unresolved pixels
   until no pixel is starved, and tiles teach their measured needs to their
   neighbors and children — no manual max-iteration setting at any depth
+- Interior detection by hyperbolicity (orbit-derivative contraction over
+  doubling windows) — scale-independent at any depth and period-agnostic,
+  where epsilon-based periodicity checks paint false interiors around deep
+  minibrots
 - Band-limited palette (shader fades bands/hue where contours go sub-pixel
   instead of aliasing into moiré)
 - Depth-invariant coloring: iteration counts are log-compressed before the
