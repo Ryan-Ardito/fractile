@@ -17,7 +17,7 @@ import { StyleVars, TileHandle, TileRenderer } from "./renderer";
 import { fixedToFloat } from "./fixedPoint";
 
 const TILE_CACHE_MAX = 768;
-const FADE_MS = 120;
+const FADE_MS = 200;
 const MOVEEND_IDLE_MS = 260;
 const ZOOM_EASE_MS = 90;
 const WHEEL_ZOOM_PER_100 = 1;
@@ -60,8 +60,19 @@ const BASE_GRID_PRIORITY = -1;
 const PREWARM_PRIORITY = 1e13;
 const PREWARM_TILE_BUDGET = 384;
 
+// First response for a tile whose best on-screen stand-in would be an
+// ancestor stretched 8x or worse (deep jumps, fast zooms): a quarter-cost
+// 128x128 pass at the CORRECT level, upgraded to full resolution by the
+// normal provisional path. Correct-level data at 2x stretch arrives ~4x
+// sooner and looks far better than deep-stretched mush.
+const COARSE_TILE_SIZE = 128;
+
 type CacheEntry = {
   tex: TileHandle;
+  // The texture this entry replaced, drawn at full opacity beneath while the
+  // new one fades in — upgrades (coarse to full, escalation frames) blend
+  // instead of popping. Freed once the fade completes.
+  prevTex: TileHandle | null;
   loadedAt: number;
   maxIter: number;
   // Largest finite escape count observed in the tile — the measured
@@ -513,6 +524,7 @@ export class FractalViewer {
       ((globalThis as { __fractileSynth?: number }).__fractileSynth ?? 0) + 1;
     this.cache.set(this.tileKey(level, tx, ty), {
       tex,
+      prevTex: null,
       loadedAt: performance.now(),
       maxIter: Math.min(...kids.map((k) => k.maxIter)),
       maxFinite: Math.max(...kids.map((k) => k.maxFinite)),
@@ -559,16 +571,21 @@ export class FractalViewer {
     final: boolean
   ): void {
     const existing = this.cache.get(key);
-    if (existing) this.renderer.deleteTile(existing.tex);
-    const tex = this.renderer.uploadTile(data, TILE_SIZE);
+    if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
+    const size = Math.round(Math.sqrt(data.length));
+    const tex = this.renderer.uploadTile(data, size);
     const level = levelOfKey(key);
-    // Provisional escalation frames swap the texture in place, no re-fade.
+    // Replacements keep the outgoing texture and fade the new one in over it
+    // (see prevTex) — coarse-to-full upgrades and escalation frames blend.
     this.cache.set(key, {
       tex,
-      loadedAt: existing ? existing.loadedAt : performance.now(),
+      prevTex: existing ? existing.tex : null,
+      loadedAt: performance.now(),
       maxIter: iterDone,
       maxFinite,
-      needsMore: !final && iterDone < ITER_HARD_CAP,
+      // More to come while the job is still escalating, or while the tile is
+      // only the coarse first pass — either way a full-size request follows.
+      needsMore: (!final && iterDone < ITER_HARD_CAP) || size < TILE_SIZE,
       level,
       cost,
     });
@@ -634,41 +651,68 @@ export class FractalViewer {
         evictKey = this.cache.keys().next().value as string;
       }
       const evicted = this.cache.get(evictKey);
-      if (evicted) this.renderer.deleteTile(evicted.tex);
+      if (evicted) {
+        this.renderer.deleteTile(evicted.tex);
+        if (evicted.prevTex) this.renderer.deleteTile(evicted.prevTex);
+      }
       this.cache.delete(evictKey);
     }
     this.dirty = true;
   }
 
-  private drawFallback(
+  // Nearest cached ancestor at walk distance >= minDepth: nearby ancestors,
+  // then a jump straight to the always-cached base grid — never hundreds of
+  // lookups per missing tile per frame.
+  private pickFallback(
     level: number,
+    tx: bigint,
+    ty: bigint,
+    minDepth = 1
+  ): { entry: CacheEntry; d: number } | null {
+    const depths: number[] = [];
+    const walk = Math.min(MAX_FALLBACK_WALK, level);
+    for (let d = minDepth; d <= walk; d++) depths.push(d);
+    const baseD = level - BASE_GRID_LEVEL;
+    if (baseD > walk && baseD >= minDepth) depths.push(baseD);
+
+    for (const d of depths) {
+      const shift = BigInt(d);
+      const entry = this.touch(
+        this.tileKey(level - d, tx >> shift, ty >> shift)
+      );
+      if (entry) return { entry, d };
+    }
+    return null;
+  }
+
+  private drawFallbackPick(
     tx: bigint,
     ty: bigint,
     x: number,
     y: number,
-    size: number
+    size: number,
+    pick: { entry: CacheEntry; d: number }
   ): void {
-    // Try nearby ancestors, then jump straight to the always-cached base
-    // grid — never hundreds of lookups per missing tile per frame.
-    const depths: number[] = [];
-    const walk = Math.min(MAX_FALLBACK_WALK, level);
-    for (let d = 1; d <= walk; d++) depths.push(d);
-    if (level - BASE_GRID_LEVEL > walk) depths.push(level - BASE_GRID_LEVEL);
-
-    for (const d of depths) {
-      const shift = BigInt(d);
-      const ptx = tx >> shift;
-      const pty = ty >> shift;
-      const entry = this.touch(this.tileKey(level - d, ptx, pty));
-      if (!entry) continue;
-      const span = 2 ** -d;
-      // Sub-rect offsets via fixed-point: remainders can exceed float64's
-      // integer range at large d, so treat them as d-bit fractions.
-      const u0 = fixedToFloat(tx - (ptx << shift), d);
-      const v0 = fixedToFloat(ty - (pty << shift), d);
-      this.renderer.drawTile(entry.tex, x, y, size, size, u0, v0, span, span, 1);
-      return;
-    }
+    const shift = BigInt(pick.d);
+    const ptx = tx >> shift;
+    const pty = ty >> shift;
+    const span = 2 ** -pick.d;
+    // Sub-rect offsets via fixed-point: remainders can exceed float64's
+    // integer range at large d, so treat them as d-bit fractions.
+    const u0 = fixedToFloat(tx - (ptx << shift), pick.d);
+    const v0 = fixedToFloat(ty - (pty << shift), pick.d);
+    this.renderer.drawTile(
+      pick.entry.tex,
+      x,
+      y,
+      size,
+      size,
+      u0,
+      v0,
+      span,
+      span,
+      1
+    );
   }
 
   private render(now: number): void {
@@ -704,23 +748,29 @@ export class FractalViewer {
       const xDev = t.x * dpr;
       const yDev = t.y * dpr;
       const alpha = entry ? Math.min(1, (now - entry.loadedAt) / FADE_MS) : 0;
-      if (alpha < 1) {
-        this.drawFallback(vis.level, t.tx, t.ty, xDev, yDev, sizeDev);
+      if (entry?.prevTex && alpha >= 1) {
+        this.renderer.deleteTile(entry.prevTex);
+        entry.prevTex = null;
       }
       const cx = t.x + vis.tilePx / 2 - this.cssW / 2;
       const cy = t.y + vis.tilePx / 2 - this.cssH / 2;
       if (entry) {
+        if (alpha < 1) {
+          // Base layer of the fade: the tile's own previous texture, else
+          // its nearest ancestor fallback.
+          if (entry.prevTex) {
+            this.renderer.drawTile(
+              entry.prevTex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, 1
+            );
+          } else {
+            const pick = this.pickFallback(vis.level, t.tx, t.ty);
+            if (pick) {
+              this.drawFallbackPick(t.tx, t.ty, xDev, yDev, sizeDev, pick);
+            }
+          }
+        }
         this.renderer.drawTile(
-          entry.tex,
-          xDev,
-          yDev,
-          sizeDev,
-          sizeDev,
-          0,
-          0,
-          1,
-          1,
-          alpha
+          entry.tex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, alpha
         );
         if (alpha < 1) fading = true;
         // A provisional frame whose escalation was cancelled off-screen:
@@ -741,17 +791,26 @@ export class FractalViewer {
             priority: cx * cx + cy * cy,
           });
         }
-      } else if (!this.pendingTiles.has(key)) {
-        this.engine.requestTile({
-          key,
-          level: vis.level,
-          tx: t.tx,
-          ty: t.ty,
-          size: TILE_SIZE,
-          maxIter: this.tileIter(vis.level, t.tx, t.ty, maxIter),
-          needsRef,
-          priority: cx * cx + cy * cy,
-        });
+      } else {
+        const pick = this.pickFallback(vis.level, t.tx, t.ty);
+        if (pick) {
+          this.drawFallbackPick(t.tx, t.ty, xDev, yDev, sizeDev, pick);
+        }
+        if (!this.pendingTiles.has(key)) {
+          // Nothing at this tile yet: with only a distant ancestor to show
+          // (deep-stretched mush), ask for the coarse first pass; with a
+          // near ancestor (routine one-level zooms) go straight to full.
+          this.engine.requestTile({
+            key,
+            level: vis.level,
+            tx: t.tx,
+            ty: t.ty,
+            size: (pick?.d ?? Infinity) > 2 ? COARSE_TILE_SIZE : TILE_SIZE,
+            maxIter: this.tileIter(vis.level, t.tx, t.ty, maxIter),
+            needsRef,
+            priority: cx * cx + cy * cy,
+          });
+        }
       }
     }
 

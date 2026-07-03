@@ -134,10 +134,41 @@ precision highp float;
 uniform sampler2D uColor;
 uniform vec4 uTexRect; // u0, v0, uSpan, vSpan
 uniform float uAlpha;
+// 0 = plain bilinear (native scale), 1 = full B-spline (heavy magnification).
+uniform float uCubicMix;
+uniform float uTexSize;
 in vec2 vUV;
 out vec4 outColor;
+
+// Cubic B-spline resampling folded into 4 bilinear taps (all weights are
+// positive, so texel pairs combine in the hardware interpolator). C2-smooth:
+// magnified tiles read as a gaussian-like blur where bilinear reads as boxy
+// tenting. Taps may cross a sub-rect edge into the rest of the same ancestor
+// texture, which is the correct neighboring content anyway.
+vec3 bspline(vec2 uv) {
+  vec2 ts = vec2(uTexSize);
+  vec2 st = uv * ts - 0.5;
+  vec2 base = floor(st);
+  vec2 f = st - base;
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w3 = f3 / 6.0;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = 1.0 - g0;
+  vec2 uv0 = (base - 0.5 + w1 / g0) / ts;
+  vec2 uv1 = (base + 1.5 + w3 / g1) / ts;
+  return g0.y * (g0.x * texture(uColor, vec2(uv0.x, uv0.y)).rgb +
+                 g1.x * texture(uColor, vec2(uv1.x, uv0.y)).rgb) +
+         g1.y * (g0.x * texture(uColor, vec2(uv0.x, uv1.y)).rgb +
+                 g1.x * texture(uColor, vec2(uv1.x, uv1.y)).rgb);
+}
+
 void main() {
-  vec3 rgb = texture(uColor, uTexRect.xy + vUV * uTexRect.zw).rgb;
+  vec2 uv = uTexRect.xy + vUV * uTexRect.zw;
+  vec3 rgb = texture(uColor, uv).rgb;
+  if (uCubicMix > 0.0) rgb = mix(rgb, bspline(uv), uCubicMix);
   outColor = vec4(rgb * uAlpha, uAlpha);
 }`;
 
@@ -215,7 +246,15 @@ export class TileRenderer {
     for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData"]) {
       this.paletteUni.set(name, gl.getUniformLocation(this.paletteProg, name));
     }
-    for (const name of ["uRect", "uViewport", "uTexRect", "uAlpha", "uColor"]) {
+    for (const name of [
+      "uRect",
+      "uViewport",
+      "uTexRect",
+      "uAlpha",
+      "uColor",
+      "uCubicMix",
+      "uTexSize",
+    ]) {
       this.compUni.set(name, gl.getUniformLocation(this.compositeProg, name));
     }
     for (const name of ["uRect", "uViewport", "uData", "uQuadOrigin"]) {
@@ -401,6 +440,14 @@ export class TileRenderer {
     gl.uniform4f(this.compUni.get("uRect") ?? null, x, y, w, h);
     gl.uniform4f(this.compUni.get("uTexRect") ?? null, u0, v0, uSpan, vSpan);
     gl.uniform1f(this.compUni.get("uAlpha") ?? null, alpha);
+    // Ramp from bilinear to B-spline as magnification grows past native:
+    // native tiles stay bit-exact, stretched fallbacks get the smooth kernel.
+    const mag = w / (uSpan * handle.size);
+    gl.uniform1f(
+      this.compUni.get("uCubicMix") ?? null,
+      Math.min(1, Math.max(0, mag - 1))
+    );
+    gl.uniform1f(this.compUni.get("uTexSize") ?? null, handle.size);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
