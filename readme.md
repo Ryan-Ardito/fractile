@@ -27,6 +27,10 @@ Open the menu in the bottom left for more controls.
 - Deep zoom (~10²⁸⁰x) via perturbation theory: one BigInt fixed-point
   reference orbit per view, float64 delta iteration per pixel, with
   rebasing for glitch-free single-reference rendering
+- Bivariate linear approximation (BLA): precomposed reference-orbit blocks
+  let pixels skip long stretches of iterations at once — order-of-magnitude
+  faster at depth (20x+ at 10¹⁸⁰), where escape times run into the hundreds
+  of thousands
 - Hand-rolled WebGL2 tile engine: exact BigInt tile addressing, LRU cache,
   parent-tile fallback, fade-in transitions
 - Caching (cost-aware eviction: expensive deep tiles survive until RAM

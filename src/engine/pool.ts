@@ -5,6 +5,7 @@
 // used (rebasing guarantees that), so replacing the reference never
 // invalidates cached or in-flight tiles.
 
+import { ITER_HARD_CAP } from "./camera";
 import { fixedToFloat, rescale } from "./fixedPoint";
 
 export type TileJob = {
@@ -87,9 +88,10 @@ export class FractalEngine {
       const dx = fixedToFloat(rescale(cxFP, bits, r.bits) - r.cxFP, r.bits);
       const dy = fixedToFloat(rescale(cyFP, bits, r.bits) - r.cyFP, r.bits);
       const driftPx = Math.hypot(dx, dy) / pixelSize;
-      // Orbit length is deliberately not part of suitability: rebasing wraps
-      // pixels around a short (or truncated interior) reference correctly, so
-      // adaptive per-tile iteration escalation never forces a recompute.
+      // Orbit length is not part of suitability here: escaped references are
+      // complete at any length, and truncated ones are extended on demand via
+      // the worker's ref-short signal (wrapping a truncated orbit would be
+      // numerically catastrophic, so workers park those pixels instead).
       const suitable = r.bits >= bits && driftPx < REF_MAX_DRIFT_PX;
       if (suitable && r.status === "ready") return true;
       if (r.status === "computing") return false;
@@ -122,6 +124,17 @@ export class FractalEngine {
       this.queue.set(job.key, job);
     }
     this.pump();
+  }
+
+  // Put a bounced job back: parked while a reference is computing (released
+  // on completion), queued otherwise — never parked beside a ready reference,
+  // which nothing would ever release.
+  private requeue(job: TileJob): void {
+    if (job.needsRef && this.ref?.status !== "ready") {
+      this.parked.set(job.key, job);
+    } else {
+      this.queue.set(job.key, job);
+    }
   }
 
   // Drop queued work and cancel in-flight work for tiles no longer wanted.
@@ -224,9 +237,30 @@ export class FractalEngine {
         break;
 
       case "no-ref": {
-        // Worker's reference was evicted before this tile ran; repark it.
+        // Worker's reference was evicted before this tile ran; requeue it.
         const meta = this.free(msg.id);
-        if (meta?.job) this.parked.set(meta.job.key, meta.job);
+        if (meta?.job) this.requeue(meta.job);
+        this.pump();
+        break;
+      }
+
+      case "ref-short": {
+        // The tile has pixels blocked on a budget-truncated reference orbit:
+        // extend the reference and requeue the tile behind it. Once the
+        // orbit escapes (or exceeds the pixel iteration cap) this can't
+        // recur, so the extension cycle terminates.
+        const meta = this.free(msg.id);
+        const r = this.ref;
+        if (r && r.status === "ready" && r.maxIter < ITER_HARD_CAP + 2048) {
+          this.ref = {
+            ...r,
+            refId: this.nextRefId++,
+            maxIter: Math.min(ITER_HARD_CAP + 2048, r.maxIter * 4),
+            status: "computing",
+          };
+          this.refJobPending = true;
+        }
+        if (meta?.job) this.requeue(meta.job);
         this.pump();
         break;
       }

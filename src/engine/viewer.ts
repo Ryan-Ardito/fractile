@@ -49,7 +49,9 @@ const BASE_PROTECT_LEVEL = 6;
 // never shows through.
 const BASE_GRID_LEVEL = 3;
 const PRELOAD_PRIORITY = 1e12;
-const BASE_GRID_PRIORITY = 1e15;
+// The base grid is 64 cheap tiles and the fallback of last resort — compute
+// it before anything else so a fresh deep load never shows the background.
+const BASE_GRID_PRIORITY = -1;
 
 // Zoom-out prewarm: once the view is idle, spend spare worker time computing
 // viewport-sized tile windows at ancestor levels, nearest level first (those

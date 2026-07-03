@@ -3,6 +3,7 @@
 // and 'set-reference' messages are processed mid-tile.
 
 import {
+  BAILOUT,
   directRows,
   escapeTime,
   makeUnresolvedBuf,
@@ -16,6 +17,7 @@ import {
   ITER_HARD_CAP,
   RANOUT_PIXEL_THRESHOLD,
 } from "./engine/camera";
+import { BlaTable, buildBla } from "./engine/bla";
 import { fixedToFloat } from "./engine/fixedPoint";
 
 type Reference = {
@@ -23,6 +25,9 @@ type Reference = {
   cxFP: bigint;
   cyFP: bigint;
   bits: number;
+  // BLA skip table, built on first deep use. Validity is per-pixel (each
+  // entry bounds |dz| and |dc| separately), so one table serves every tile.
+  bla: BlaTable | null;
 };
 
 type TileMsg = {
@@ -47,7 +52,14 @@ type ReferenceMsg = {
   maxIter: number;
 };
 
-type SetReferenceMsg = { type: "set-reference"; refId: number } & Reference;
+type SetReferenceMsg = {
+  type: "set-reference";
+  refId: number;
+  orbit: Float64Array;
+  cxFP: bigint;
+  cyFP: bigint;
+  bits: number;
+};
 type CancelMsg = { type: "cancel"; id: number };
 type InMsg = TileMsg | ReferenceMsg | SetReferenceMsg | CancelMsg;
 
@@ -85,6 +97,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
 
   // Perturbation setup (deep tiles); null means the direct float64 path.
   let orbit: Float64Array | null = null;
+  let bla: BlaTable | null = null;
   let dcx0 = 0;
   let dcy0 = 0;
   const tileW = 16 * 2 ** -level;
@@ -100,17 +113,31 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     const eight = 8n << BigInt(ref.bits);
     dcx0 = fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits);
     dcy0 = fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits);
+    if (!ref.bla) ref.bla = buildBla(ref.orbit);
+    bla = ref.bla;
   }
   const x0 = orbit ? dcx0 : Number(tx) * tileW - 8;
   const y0 = orbit ? dcy0 : Number(ty) * tileW - 8;
 
-  // First pass at the requested budget, collecting unresolved pixel state.
+  // First-pass budget: at least the reference orbit's own escape time — the
+  // reference sits at the view center, so its escape count (plus margin)
+  // predicts the neighborhood's needs far better than a per-level guess and
+  // spares fresh deep views the escalation ladder entirely.
+  let budget = maxIter;
+  if (orbit) {
+    budget = Math.min(
+      ITER_HARD_CAP,
+      Math.max(budget, Math.ceil((orbit.length >> 1) * 1.25))
+    );
+  }
+
+  // First pass, collecting unresolved pixel state.
   for (let row = 0; row < size; row += ROW_BAND) {
     const rowEnd = Math.min(row + ROW_BAND, size);
     if (orbit) {
-      perturbRows(dcx0, dcy0, step, size, maxIter, orbit, row, rowEnd, out, un);
+      perturbRows(dcx0, dcy0, step, size, budget, orbit, row, rowEnd, out, un, bla);
     } else {
-      directRows(level, Number(tx), Number(ty), size, maxIter, row, rowEnd, out, un);
+      directRows(level, Number(tx), Number(ty), size, budget, row, rowEnd, out, un);
     }
     await tick();
     if (cancelled.has(id)) {
@@ -126,21 +153,23 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // recomputed. Each round posts a provisional frame so deep tiles appear
   // progressively instead of blocking until fully converged.
   let maxFinite = maxFiniteOf(out);
-  let budget = maxIter;
   while (un.count > RANOUT_PIXEL_THRESHOLD && budget < ITER_HARD_CAP) {
-    post({
-      type: "tile-progress",
-      id,
-      key,
-      data: out.slice(),
-      ranOut: un.count,
-      iterDone: budget,
-      maxFinite,
-      costMs: performance.now() - t0,
-    });
+    // Show progress only once something resolved — an all-ran-out frame
+    // would paint the tile as (wrong) solid interior.
+    if (un.count < size * size) {
+      post({
+        type: "tile-progress",
+        id,
+        key,
+        data: out.slice(),
+        ranOut: un.count,
+        iterDone: budget,
+        maxFinite,
+        costMs: performance.now() - t0,
+      });
+    }
     const next = Math.min(ITER_HARD_CAP, budget * ITER_ESCALATION);
     let write = 0;
-    let resolved = 0;
     for (let i = 0; i < un.count; i++) {
       const idx = un.idx[i];
       const px = idx % size;
@@ -148,18 +177,18 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       const cx = x0 + (px + 0.5) * step;
       const cy = y0 + (py + 0.5) * step;
       const v = orbit
-        ? perturbPixel(cx, cy, orbit, next, budget, un.ax[i], un.ay[i], un.m[i])
-        : escapeTime(cx, cy, next, budget, un.ax[i], un.ay[i]);
+        ? perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla)
+        : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i]);
       if (v < 0) {
         un.idx[write] = idx;
         un.ax[write] = pixelState.ax;
         un.ay[write] = pixelState.ay;
         un.m[write] = pixelState.m;
+        un.n[write] = pixelState.n;
         write++;
       } else {
         out[idx] = v;
         if (v > maxFinite) maxFinite = v;
-        resolved++;
       }
       if ((i & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
         await tick();
@@ -172,9 +201,33 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     }
     un.count = write;
     budget = next;
-    // A whole 4x round that resolves nothing means the leftovers are
-    // effectively interior at this location; more budget is wasted heat.
-    if (resolved === 0) break;
+    // No early exit on a fruitless round: an escape band can start above
+    // several ladder rungs at once (fresh deep views), and true interiors
+    // resolve via cycle detection long before the hard cap anyway.
+  }
+
+  // Unresolved pixels against a budget-truncated (never-escaped) reference
+  // are blocked on orbit length, not iteration count: show what resolved,
+  // then hand the tile back so the pool can extend the reference.
+  if (orbit && un.count > RANOUT_PIXEL_THRESHOLD) {
+    const lastIdx = orbit.length - 2;
+    const escaped =
+      orbit[lastIdx] * orbit[lastIdx] + orbit[lastIdx + 1] * orbit[lastIdx + 1] >
+      BAILOUT;
+    if (!escaped && (orbit.length >> 1) <= budget) {
+      post({
+        type: "tile-progress",
+        id,
+        key,
+        data: out,
+        ranOut: un.count,
+        iterDone: budget,
+        maxFinite,
+        costMs: performance.now() - t0,
+      });
+      post({ type: "ref-short", id, key });
+      return;
+    }
   }
 
   post(
@@ -229,6 +282,7 @@ onmessage = (e: MessageEvent<InMsg>) => {
         cxFP: msg.cxFP,
         cyFP: msg.cyFP,
         bits: msg.bits,
+        bla: null,
       });
       // Keep at most two references: the active one plus its predecessor for
       // tiles already in flight.
