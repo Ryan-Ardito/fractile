@@ -8,11 +8,19 @@
 // covers [tx·w − 8, (tx+1)·w − 8] × [ty·w − 8, (ty+1)·w − 8] with
 // w = 16·2^−level, and the imaginary axis points *down* the screen.
 
-import { fixedToFloat, floatToFixed, rescale } from "./fixedPoint";
+import {
+  fixedToFloat,
+  fixedToFloatScaled,
+  floatToFixed,
+  floatToFixedShifted,
+  rescale,
+} from "./fixedPoint";
 
 export const MIN_ZOOM = 3;
-// Plain float64 perturbation deltas stay healthy to ~1e-290; cap with margin.
-export const MAX_ZOOM = 940;
+// With the extended-exponent (floatexp) deep pixel path there is no float64
+// delta ceiling; the practical limit is BigInt reference-orbit cost, which
+// grows with precision. 100k zoom levels ≈ 10^30103.
+export const MAX_ZOOM = 100_000;
 export const TILE_SIZE = 256;
 export const BASE_ITERATIONS = 1024;
 // Below this level, float64 addresses pixels directly; above it, perturbation.
@@ -25,6 +33,11 @@ export const PERTURB_MIN_LEVEL = 36;
 // speedup there is ~1x anyway. Deeper, deltas are astronomically far inside
 // the radii: safe and where the speedup actually lives.
 export const BLA_MIN_LEVEL = 96;
+// From this level down, tiles use the extended-exponent (floatexp) pixel
+// path: dz/dc carry an explicit power-of-two exponent so they survive past
+// float64's ~1e-308 floor (zoom ~940 was the old ceiling; switch early with
+// margin). Below it, the plain float64 path runs untouched.
+export const DEEP_MIN_LEVEL = 900;
 
 // Adaptive iterations (shared by the worker and the viewer): a tile whose
 // ran-out pixel count exceeds the threshold keeps iterating — the worker
@@ -68,10 +81,13 @@ export class DeepCamera {
     this.cyFP = floatToFixed(cy, this.bits);
   }
 
-  // Complex units per CSS pixel.
-  pixelSize(): number {
-    return 2 ** (-this.zoom - 4);
+  // Complex units per CSS pixel, as mantissa·2^exponent — float64 alone
+  // underflows past zoom ~1015. m is in (0.5, 1].
+  pixelSizeParts(): { m: number; e: number } {
+    const zi = Math.floor(this.zoom);
+    return { m: 2 ** -(this.zoom - zi), e: -zi - 4 };
   }
+
 
   private ensurePrecision(): void {
     const nb = requiredBits(this.zoom);
@@ -92,30 +108,35 @@ export class DeepCamera {
   }
 
   panPixels(dx: number, dy: number): void {
-    const ps = this.pixelSize();
-    this.cxFP += floatToFixed(dx * ps, this.bits);
-    this.cyFP += floatToFixed(dy * ps, this.bits);
+    const ps = this.pixelSizeParts();
+    this.cxFP += floatToFixedShifted(dx * ps.m, ps.e, this.bits);
+    this.cyFP += floatToFixedShifted(dy * ps.m, ps.e, this.bits);
     this.clampCenter();
   }
 
   // Zoom keeping the complex point at CSS offset (ax, ay) from the canvas
   // center fixed on screen.
   zoomTo(zoom: number, ax = 0, ay = 0): void {
-    const psOld = this.pixelSize();
+    const psOld = this.pixelSizeParts();
     this.zoom = Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM);
     this.ensurePrecision();
-    const psNew = this.pixelSize();
-    this.cxFP += floatToFixed(ax * (psOld - psNew), this.bits);
-    this.cyFP += floatToFixed(ay * (psOld - psNew), this.bits);
+    const psNew = this.pixelSizeParts();
+    // ax·(psOld − psNew) as two exponent-scaled contributions.
+    this.cxFP +=
+      floatToFixedShifted(ax * psOld.m, psOld.e, this.bits) -
+      floatToFixedShifted(ax * psNew.m, psNew.e, this.bits);
+    this.cyFP +=
+      floatToFixedShifted(ay * psOld.m, psOld.e, this.bits) -
+      floatToFixedShifted(ay * psNew.m, psNew.e, this.bits);
     this.clampCenter();
   }
 
   // Complex coordinates (fixed-point, this.bits) at a CSS offset from center.
   complexAt(ax: number, ay: number): [bigint, bigint] {
-    const ps = this.pixelSize();
+    const ps = this.pixelSizeParts();
     return [
-      this.cxFP + floatToFixed(ax * ps, this.bits),
-      this.cyFP + floatToFixed(ay * ps, this.bits),
+      this.cxFP + floatToFixedShifted(ax * ps.m, ps.e, this.bits),
+      this.cyFP + floatToFixedShifted(ay * ps.m, ps.e, this.bits),
     ];
   }
 
@@ -136,7 +157,6 @@ export class DeepCamera {
       Math.ceil(MAX_ZOOM) + 2
     );
     const tilePx = TILE_SIZE * 2 ** (this.zoom - level);
-    const tileW = 16 * 2 ** -level;
     const shift = BigInt(this.bits + 4 - level);
     const eight = 8n << BigInt(this.bits);
 
@@ -144,8 +164,10 @@ export class DeepCamera {
     const ny = this.cyFP + eight;
     const txc = nx >> shift; // floor — BigInt >> rounds toward -inf
     const tyc = ny >> shift;
-    const fracX = fixedToFloat(nx - (txc << shift), this.bits) / tileW;
-    const fracY = fixedToFloat(ny - (tyc << shift), this.bits) / tileW;
+    // Remainder / tile width, computed in exponent space (the tile width
+    // 2^(4-level) underflows float64 at depth).
+    const fracX = fixedToFloatScaled(nx - (txc << shift), this.bits, 4 - level);
+    const fracY = fixedToFloatScaled(ny - (tyc << shift), this.bits, 4 - level);
 
     // Screen position of the center tile's origin.
     const ox = wCss / 2 - fracX * tilePx;

@@ -10,6 +10,11 @@
 import { BLA_LMIN, BLA_LMIN_LOG2, BlaTable } from "./bla";
 import { fixedToFloat, fixedMul } from "./fixedPoint";
 
+// Band bounds for the deep path's scaled mantissas: w is renormalized into
+// [2^-32, 2^32], so the exponent s tracks log2|dz| to within ~32 bits.
+const W_HI = 4294967296; // 2^32
+const W_LO = 2.3283064365386963e-10; // 2^-32
+
 const LN_2 = Math.log(2);
 
 export const BAILOUT = 24;
@@ -65,7 +70,7 @@ export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
 // interior-detection derivative magnitude.
 // Single-threaded module state: rows are computed synchronously, so this
 // never aliases between pixels.
-export const pixelState = { ax: 0, ay: 0, m: 0, n: 0, e2: 1 };
+export const pixelState = { ax: 0, ay: 0, s: 0, m: 0, n: 0, e2: 1 };
 
 // Escape-time returns: smooth iteration count (> 0) on escape, 0 for
 // confirmed interior (attracting-cycle test), -1 when maxIters ran out
@@ -114,6 +119,7 @@ export const escapeTime = (
 
   pixelState.ax = zx;
   pixelState.ay = zy;
+  pixelState.s = 0;
   pixelState.m = 0;
   pixelState.n = maxIters;
   pixelState.e2 = e2;
@@ -235,6 +241,7 @@ export const perturbPixel = (
         // Reference too short (truncated, not escaped): park unresolved.
         pixelState.ax = dzx;
         pixelState.ay = dzy;
+        pixelState.s = 0;
         pixelState.m = m;
         pixelState.n = n;
         pixelState.e2 = e2;
@@ -322,6 +329,7 @@ export const perturbPixel = (
   if (dcWeak) return BAD_REF;
   pixelState.ax = dzx;
   pixelState.ay = dzy;
+  pixelState.s = 0;
   pixelState.m = m;
   pixelState.n = maxIter;
   pixelState.e2 = e2;
@@ -344,6 +352,8 @@ export type UnresolvedBuf = {
   idx: Int32Array;
   ax: Float64Array;
   ay: Float64Array;
+  // Deep-path delta exponent (dz = (ax, ay)·2^s); 0 on the float64 paths.
+  s: Int32Array;
   m: Int32Array;
   n: Int32Array;
   e2: Float64Array;
@@ -351,14 +361,16 @@ export type UnresolvedBuf = {
 
 // Bad-reference report for a row pass: how many pixels returned BAD_REF and
 // the dc of the first one — the natural center for a rescue reference (its
-// orbit is bounded, so it stays near the whole region's dynamics).
-export type BadRefBuf = { count: number; dcx: number; dcy: number };
+// orbit is bounded, so it stays near the whole region's dynamics). On the
+// deep path dcx/dcy are mantissas at scale 2^e; e is 0 on the float64 path.
+export type BadRefBuf = { count: number; dcx: number; dcy: number; e: number };
 
 export const makeUnresolvedBuf = (capacity: number): UnresolvedBuf => ({
   count: 0,
   idx: new Int32Array(capacity),
   ax: new Float64Array(capacity),
   ay: new Float64Array(capacity),
+  s: new Int32Array(capacity),
   m: new Int32Array(capacity),
   n: new Int32Array(capacity),
   e2: new Float64Array(capacity),
@@ -368,6 +380,7 @@ const recordUnresolved = (un: UnresolvedBuf, idx: number): void => {
   un.idx[un.count] = idx;
   un.ax[un.count] = pixelState.ax;
   un.ay[un.count] = pixelState.ay;
+  un.s[un.count] = pixelState.s;
   un.m[un.count] = pixelState.m;
   un.n[un.count] = pixelState.n;
   un.e2[un.count] = pixelState.e2;
@@ -434,6 +447,276 @@ export const perturbRows = (
           if (bad.count === 0) {
             bad.dcx = dcx;
             bad.dcy = dcy;
+          }
+          bad.count++;
+        }
+      } else if (v < 0) {
+        ranOut++;
+        if (un) recordUnresolved(un, rowIdx + px);
+      }
+      out[rowIdx + px] = v > 0 ? v : 0;
+    }
+  }
+  return ranOut;
+};
+
+// --- extended-exponent (floatexp) deep path: arbitrary zoom ---
+//
+// Past zoom ~940, dz and dc underflow float64. Here the delta carries an
+// explicit power-of-two exponent: dz = (wx, wy)·2^s with the mantissa pair
+// renormalized into [2^-32, 2^32], and dc = (ux, uy)·2^dcE with mantissas in
+// sample-pitch units (so dcE = -(level+4) and |u| is small). The reference
+// orbit needs no change — its values are O(1) — and z = Z + dz is formed in
+// plain float64, where an unrepresentably small dz correctly contributes
+// nothing. Every structural rule of perturbPixel (rebasing, wrap-at-escape
+// only, e2 interior windows, dc-starvation/BAD_REF, BLA validity) carries
+// over; only the delta arithmetic is scaled.
+export const perturbPixelDeep = (
+  ux: number,
+  uy: number,
+  dcE: number,
+  orbit: Float64Array,
+  maxIter: number,
+  n0 = 0,
+  swx = 0,
+  swy = 0,
+  ss = 0,
+  sm = 0,
+  bla: BlaTable | null = null,
+  se2 = 1
+): number => {
+  const orbitLen = orbit.length >> 1;
+  const ex = orbit[2 * (orbitLen - 1)];
+  const ey = orbit[2 * (orbitLen - 1) + 1];
+  const orbitEscaped = ex * ex + ey * ey > BAILOUT;
+  const dcMag1 = Math.abs(ux) + Math.abs(uy);
+  // |dc| as float64 — 0 when genuinely below the float64 floor, which is the
+  // correct value for the BLA rc comparisons (the bound holds a fortiori).
+  const dcMagF = dcMag1 * 2 ** dcE;
+  // Starvation threshold in exponent space (float64 magnitudes underflow):
+  // starved when log2|dz| > log2|dc| + 49, with 34 bits of slack for the
+  // mantissa band, i.e. when s alone exceeds this.
+  const starveS = dcMag1 === 0 ? Infinity : dcE + Math.log2(dcMag1) + 49 + 34;
+
+  let wx = swx;
+  let wy = swy;
+  let s = ss;
+  let p2s = 2 ** s;
+  let m = sm;
+  let e2 = se2;
+  let e2Max = 0;
+  let winMinS = Infinity;
+  let dcWeak = false;
+  let nextCheck = INTERIOR_FIRST_CHECK;
+  while (nextCheck <= n0) nextCheck *= 2;
+
+  for (let n = n0; n < maxIter; n++) {
+    let refX = orbit[2 * m];
+    let refY = orbit[2 * m + 1];
+    const zx = refX + wx * p2s;
+    const zy = refY + wy * p2s;
+    const zMag = zx * zx + zy * zy;
+    if (zMag > BAILOUT) {
+      return n + 2 - Math.log(Math.log(zMag)) / LN_2;
+    }
+    if (s < winMinS) winMinS = s;
+
+    if (n !== 0) {
+      e2 *= 4 * zMag;
+      if (e2 > E2_CLAMP) e2 = E2_CLAMP;
+      if (e2 > e2Max) e2Max = e2;
+      if (n >= nextCheck) {
+        if (winMinS > starveS) dcWeak = true;
+        winMinS = Infinity;
+        if (e2Max < INTERIOR_E2) return dcWeak ? BAD_REF : 0;
+        e2Max = 0;
+        while (nextCheck <= n) nextCheck *= 2;
+      }
+    }
+
+    // Rebase / wrap: the float64 image of dz (0 when unrepresentably small)
+    // gives exactly the right comparisons — an invisible delta never
+    // outweighs z, and a wrap only happens once the delta is O(z) anyway.
+    const dzxF = wx * p2s;
+    const dzyF = wy * p2s;
+    const dzMagF2 = dzxF * dzxF + dzyF * dzyF;
+    if (m + 1 >= orbitLen) {
+      if (!orbitEscaped) {
+        if (dcWeak) return BAD_REF;
+        pixelState.ax = wx;
+        pixelState.ay = wy;
+        pixelState.s = s;
+        pixelState.m = m;
+        pixelState.n = n;
+        pixelState.e2 = e2;
+        return -1;
+      }
+      wx = zx;
+      wy = zy;
+      s = 0;
+      p2s = 1;
+      refX = 0;
+      refY = 0;
+    } else if (zMag < dzMagF2) {
+      wx = zx;
+      wy = zy;
+      s = 0;
+      p2s = 1;
+      refX = 0;
+      refY = 0;
+    }
+
+    if (bla !== null && (m & (BLA_LMIN - 1)) === 0) {
+      const levels = bla.levels;
+      const i = m >> BLA_LMIN_LOG2;
+      // |dz| in float64: 0 when far below the floor, which correctly passes
+      // every radius — the delta really is that small.
+      const dzMag = (Math.abs(wx) + Math.abs(wy)) * p2s;
+      let skipped = false;
+      for (let k = levels.length - 1; k >= 0; k--) {
+        if ((i & ((1 << k) - 1)) !== 0) continue;
+        const lv = levels[k];
+        const j = i >> k;
+        if (
+          j >= lv.rz.length ||
+          !(dzMag < lv.rz[j]) ||
+          !(dcMagF < lv.rc[j]) ||
+          n + lv.len > maxIter
+        ) {
+          continue;
+        }
+        const axv = lv.ax[j];
+        const ayv = lv.ay[j];
+        const bxv = lv.bx[j];
+        const byv = lv.by[j];
+        // Coefficients near the float64 ceiling could overflow the scaled
+        // mantissas; such blocks live on escape ramps and are skippable.
+        if (
+          !(Math.abs(axv) + Math.abs(ayv) < 1e150) ||
+          !(Math.abs(bxv) + Math.abs(byv) < 1e150)
+        ) {
+          continue;
+        }
+        // Same trust rules as the float64 path: a skip at the radius edge or
+        // in the starved regime poisons bounded verdicts.
+        if (dzMag > 0 && (s > starveS || !(dzMag < lv.rz[j] * 2 ** -16))) {
+          dcWeak = true;
+        }
+        // dz' = A·dz + B·dc, merged at the coarser scale.
+        const pxm = axv * wx - ayv * wy;
+        const pym = axv * wy + ayv * wx;
+        const qxm = bxv * ux - byv * uy;
+        const qym = bxv * uy + byv * ux;
+        const d = s - dcE;
+        if (d >= 0) {
+          const f = 2 ** -d;
+          wx = pxm + qxm * f;
+          wy = pym + qym * f;
+        } else {
+          const f = 2 ** d;
+          wx = pxm * f + qxm;
+          wy = pym * f + qym;
+          s = dcE;
+        }
+        e2 *= axv * axv + ayv * ayv;
+        if (e2 > E2_CLAMP) e2 = E2_CLAMP;
+        if (e2 > e2Max) e2Max = e2;
+        m += lv.len;
+        n += lv.len - 1;
+        skipped = true;
+        break;
+      }
+      if (skipped) {
+        // A applied in one go can move the mantissa far out of band.
+        const wm = Math.abs(wx) + Math.abs(wy);
+        if (wm > 0 && (wm > W_HI || wm < W_LO)) {
+          const k = Math.round(Math.log2(wm));
+          const g = 2 ** -k;
+          wx *= g;
+          wy *= g;
+          s += k;
+        }
+        p2s = 2 ** s;
+        continue;
+      }
+    }
+
+    // Plain step: dz' = (2Z + dz)·dz + dc = 2^s·((2Z + dz)·w) + 2^dcE·u.
+    const dxF = wx * p2s;
+    const dyF = wy * p2s;
+    const sx = 2 * refX + dxF;
+    const sy = 2 * refY + dyF;
+    const pxm = sx * wx - sy * wy;
+    const pym = sx * wy + sy * wx;
+    const d = s - dcE;
+    if (d >= 0) {
+      const f = 2 ** -d;
+      wx = pxm + ux * f;
+      wy = pym + uy * f;
+    } else {
+      const f = 2 ** d;
+      wx = pxm * f + ux;
+      wy = pym * f + uy;
+      s = dcE;
+      p2s = 2 ** s;
+    }
+    m++;
+    // Growth per plain step is bounded (|2Z + dz| < 2·bailout), so one band
+    // shift keeps the mantissa in range.
+    const wm = Math.abs(wx) + Math.abs(wy);
+    if (wm > W_HI) {
+      wx *= W_LO;
+      wy *= W_LO;
+      s += 32;
+      p2s = 2 ** s;
+    } else if (wm !== 0 && wm < W_LO) {
+      wx *= W_HI;
+      wy *= W_HI;
+      s -= 32;
+      p2s = 2 ** s;
+    }
+  }
+
+  if (dcWeak) return BAD_REF;
+  pixelState.ax = wx;
+  pixelState.ay = wy;
+  pixelState.s = s;
+  pixelState.m = m;
+  pixelState.n = maxIter;
+  pixelState.e2 = e2;
+  return -1;
+};
+
+// Deep-path row pass: per-pixel dc mantissas are u0 + (px + 0.5) in
+// sample-pitch units at scale 2^dcE (dcE = -(level + 4)); fresh pixels start
+// with dz = 0 at scale dcE.
+export const perturbRowsDeep = (
+  u0x: number,
+  u0y: number,
+  dcE: number,
+  size: number,
+  maxIter: number,
+  orbit: Float64Array,
+  rowStart: number,
+  rowEnd: number,
+  out: Float32Array,
+  un?: UnresolvedBuf,
+  bla: BlaTable | null = null,
+  bad?: BadRefBuf
+): number => {
+  let ranOut = 0;
+  for (let py = rowStart; py < rowEnd; py++) {
+    const uy = u0y + (py + 0.5);
+    const rowIdx = py * size;
+    for (let px = 0; px < size; px++) {
+      const ux = u0x + (px + 0.5);
+      const v = perturbPixelDeep(ux, uy, dcE, orbit, maxIter, 0, 0, 0, dcE, 0, bla);
+      if (v === BAD_REF) {
+        if (bad) {
+          if (bad.count === 0) {
+            bad.dcx = ux;
+            bad.dcy = uy;
+            bad.e = dcE;
           }
           bad.count++;
         }

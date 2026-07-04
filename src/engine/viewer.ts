@@ -724,12 +724,14 @@ export class FractalViewer {
     const maxIter = this.baseIter(vis.level);
     const needsRef = vis.level >= PERTURB_MIN_LEVEL;
     if (needsRef) {
+      const ps = this.camera.pixelSizeParts();
       this.engine.ensureReference(
         this.camera.cxFP,
         this.camera.cyFP,
         this.camera.bits,
         maxIter,
-        this.camera.pixelSize()
+        ps.m,
+        ps.e
       );
     }
 

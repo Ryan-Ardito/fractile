@@ -9,18 +9,26 @@ import {
   escapeTime,
   makeUnresolvedBuf,
   perturbPixel,
+  perturbPixelDeep,
   perturbRows,
+  perturbRowsDeep,
   pixelState,
   referenceOrbit,
 } from "./engine/mandelbrot";
 import {
   BLA_MIN_LEVEL,
+  DEEP_MIN_LEVEL,
   ITER_ESCALATION,
   ITER_HARD_CAP,
   RANOUT_PIXEL_THRESHOLD,
 } from "./engine/camera";
 import { BlaTable, buildBla } from "./engine/bla";
-import { fixedToFloat, floatToFixed } from "./engine/fixedPoint";
+import {
+  fixedToFloat,
+  fixedToFloatExp,
+  floatToFixed,
+  floatToFixedShifted,
+} from "./engine/fixedPoint";
 
 type Reference = {
   orbit: Float64Array;
@@ -99,7 +107,8 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   const t0 = performance.now();
   const out = new Float32Array(size * size);
   const un = makeUnresolvedBuf(size * size);
-  const bad = { count: 0, dcx: 0, dcy: 0 };
+  const bad = { count: 0, dcx: 0, dcy: 0, e: 0 };
+  const deep = level >= DEEP_MIN_LEVEL;
 
   // Bounded verdicts from dc-starved pixels mean the reference orbit escapes
   // while these pixels don't (a minibrot under an exterior reference): hand
@@ -124,8 +133,16 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       type: "ref-unsuitable",
       id,
       key,
-      cxFP: refObj!.cxFP + floatToFixed(bad.dcx, refObj!.bits),
-      cyFP: refObj!.cyFP + floatToFixed(bad.dcy, refObj!.bits),
+      cxFP:
+        refObj!.cxFP +
+        (bad.e === 0
+          ? floatToFixed(bad.dcx, refObj!.bits)
+          : floatToFixedShifted(bad.dcx, bad.e, refObj!.bits)),
+      cyFP:
+        refObj!.cyFP +
+        (bad.e === 0
+          ? floatToFixed(bad.dcy, refObj!.bits)
+          : floatToFixedShifted(bad.dcy, bad.e, refObj!.bits)),
       bits: refObj!.bits,
     });
   };
@@ -136,6 +153,9 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   let refObj: Reference | null = null;
   let dcx0 = 0;
   let dcy0 = 0;
+  // Deep path: dc in sample-pitch units (mantissa u, scale 2^dcE) — the
+  // float64 tile width underflows past level ~1020.
+  const dcE = -(level + 4);
   const tileW = 16 * 2 ** -level;
   const step = tileW / size;
   if (refId !== null) {
@@ -148,8 +168,19 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     orbit = ref.orbit;
     const shift = BigInt(ref.bits + 4 - level);
     const eight = 8n << BigInt(ref.bits);
-    dcx0 = fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits);
-    dcy0 = fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits);
+    if (deep) {
+      const dx = fixedToFloatExp((tx << shift) - eight - ref.cxFP, ref.bits);
+      const dy = fixedToFloatExp((ty << shift) - eight - ref.cyFP, ref.bits);
+      // Exponent gaps stay small: tiles sit within the reference drift
+      // tolerance, so the origin offset is at most ~2^15 sample pitches.
+      // Guard the exact-zero offset (a tile origin flush with the reference,
+      // common for rescaled shallow bookmarks): 0 · 2^huge is NaN.
+      dcx0 = dx.m === 0 ? 0 : dx.m * 2 ** (dx.e - dcE);
+      dcy0 = dy.m === 0 ? 0 : dy.m * 2 ** (dy.e - dcE);
+    } else {
+      dcx0 = fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits);
+      dcy0 = fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits);
+    }
     if (level >= BLA_MIN_LEVEL) {
       if (!ref.bla) ref.bla = buildBla(ref.orbit);
       bla = ref.bla;
@@ -157,6 +188,8 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   }
   const x0 = orbit ? dcx0 : Number(tx) * tileW - 8;
   const y0 = orbit ? dcy0 : Number(ty) * tileW - 8;
+  // Per-pixel offset scale within the tile: 1 sample pitch on the deep path.
+  const pixStep = orbit && deep ? 1 : step;
 
   // First-pass budget: at least the reference orbit's own escape time — the
   // reference sits at the view center, so its escape count (plus margin)
@@ -173,7 +206,12 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // First pass, collecting unresolved pixel state.
   for (let row = 0; row < size; row += ROW_BAND) {
     const rowEnd = Math.min(row + ROW_BAND, size);
-    if (orbit) {
+    if (orbit && deep) {
+      perturbRowsDeep(
+        dcx0, dcy0, dcE, size, budget, orbit, row, rowEnd, out, un, bla,
+        msg.noRescue ? undefined : bad
+      );
+    } else if (orbit) {
       perturbRows(
         dcx0, dcy0, step, size, budget, orbit, row, rowEnd, out, un, bla,
         msg.noRescue ? undefined : bad
@@ -220,15 +258,18 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       const idx = un.idx[i];
       const px = idx % size;
       const py = (idx / size) | 0;
-      const cx = x0 + (px + 0.5) * step;
-      const cy = y0 + (py + 0.5) * step;
+      const cx = x0 + (px + 0.5) * pixStep;
+      const cy = y0 + (py + 0.5) * pixStep;
       const v = orbit
-        ? perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
+        ? deep
+          ? perturbPixelDeep(cx, cy, dcE, orbit, next, un.n[i], un.ax[i], un.ay[i], un.s[i], un.m[i], bla, un.e2[i])
+          : perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
         : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i], un.e2[i]);
       if (v === BAD_REF && !msg.noRescue) {
         if (bad.count === 0) {
           bad.dcx = cx;
           bad.dcy = cy;
+          bad.e = deep ? dcE : 0;
         }
         bad.count++;
         out[idx] = 0;
@@ -236,6 +277,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         un.idx[write] = idx;
         un.ax[write] = pixelState.ax;
         un.ay[write] = pixelState.ay;
+        un.s[write] = pixelState.s;
         un.m[write] = pixelState.m;
         un.n[write] = pixelState.n;
         un.e2[write] = pixelState.e2;

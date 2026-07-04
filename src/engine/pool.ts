@@ -6,7 +6,7 @@
 // invalidates cached or in-flight tiles.
 
 import { ITER_HARD_CAP } from "./camera";
-import { fixedToFloat, rescale } from "./fixedPoint";
+import { fixedToFloatScaled, rescale } from "./fixedPoint";
 
 export type TileJob = {
   key: string;
@@ -92,13 +92,21 @@ export class FractalEngine {
     cyFP: bigint,
     bits: number,
     maxIter: number,
-    pixelSize: number
+    psMant: number,
+    psExp: number
   ): boolean {
     const r = this.ref;
     if (r) {
-      const dx = fixedToFloat(rescale(cxFP, bits, r.bits) - r.cxFP, r.bits);
-      const dy = fixedToFloat(rescale(cyFP, bits, r.bits) - r.cyFP, r.bits);
-      const driftPx = Math.hypot(dx, dy) / pixelSize;
+      // Drift in pixels, computed in exponent space (the pixel size itself
+      // underflows float64 at depth). Saturates to Infinity when huge, which
+      // correctly forces a recompute.
+      const dx =
+        fixedToFloatScaled(rescale(cxFP, bits, r.bits) - r.cxFP, r.bits, psExp) /
+        psMant;
+      const dy =
+        fixedToFloatScaled(rescale(cyFP, bits, r.bits) - r.cyFP, r.bits, psExp) /
+        psMant;
+      const driftPx = Math.hypot(dx, dy);
       // Orbit length is not part of suitability here: escaped references are
       // complete at any length, and truncated ones are extended on demand via
       // the worker's ref-short signal (wrapping a truncated orbit would be
