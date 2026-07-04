@@ -46,7 +46,14 @@ export const DEEP_MIN_LEVEL = 900;
 // visual improvement" in a single job, with no tile recomputes.
 export const RANOUT_PIXEL_THRESHOLD = 32;
 export const ITER_ESCALATION = 4;
-export const ITER_HARD_CAP = 1 << 20;
+// Measured at real minibrot fringes (z162): visible halo pixels escape at
+// 1-2.4M — just past the old 2^20 cap — and cost ~0.2ms each with BLA and a
+// suitable (near-cycle) reference, so the cap buys visible detail almost
+// free at depth. It is memory-coupled: parked pixels need the reference
+// orbit as long as their budget (16 bytes/iteration/worker), so 2^22 keeps
+// the worst-case orbit at ~67MB. The escalation ladder's wall-clock guard
+// (worker) bounds the BLA-weak worst case in time, not iterations.
+export const ITER_HARD_CAP = 1 << 22;
 
 const CLAMP_X = 12;
 const CLAMP_Y = 6;

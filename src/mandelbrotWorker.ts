@@ -95,6 +95,11 @@ const tick = (): Promise<void> =>
 const ROW_BAND = 16;
 // Escalation passes yield for cancel/set-reference between chunks of pixels.
 const ESCALATE_CHUNK = 2048;
+// Wall-clock ceiling for a tile's adaptive escalation: where BLA compresses
+// deep budgets, rungs are cheap and the ladder runs to the iteration cap;
+// where it can't (shallow band, unsuitable reference), stop honestly rather
+// than crawl — remaining unresolved pixels render black as before.
+const ESCALATE_TIME_BUDGET_MS = 10000;
 
 const maxFiniteOf = (out: Float32Array): number => {
   let max = 0;
@@ -237,7 +242,11 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // recomputed. Each round posts a provisional frame so deep tiles appear
   // progressively instead of blocking until fully converged.
   let maxFinite = maxFiniteOf(out);
-  while (un.count > RANOUT_PIXEL_THRESHOLD && budget < ITER_HARD_CAP) {
+  while (
+    un.count > RANOUT_PIXEL_THRESHOLD &&
+    budget < ITER_HARD_CAP &&
+    performance.now() - t0 < ESCALATE_TIME_BUDGET_MS
+  ) {
     // Show progress only once something resolved — an all-ran-out frame
     // would paint the tile as (wrong) solid interior.
     if (un.count < size * size) {
@@ -377,6 +386,15 @@ onmessage = (e: MessageEvent<InMsg>) => {
       void handleReference(msg);
       break;
     case "set-reference": {
+      // A same-center replacement (an extension or re-length) strictly
+      // supersedes its predecessor — drop it immediately rather than hold
+      // two multi-megabyte orbits; in-flight tiles against the old refId
+      // bounce off "no-ref" and requeue.
+      for (const [staleId, ref] of references) {
+        if (ref.cxFP === msg.cxFP && ref.cyFP === msg.cyFP && ref.bits === msg.bits) {
+          references.delete(staleId);
+        }
+      }
       references.set(msg.refId, {
         orbit: msg.orbit,
         cxFP: msg.cxFP,
