@@ -44,13 +44,15 @@ const E2_CLAMP = 1e60;
 // the edge of their validity radii where linearization error accumulates
 // systematically across near-parabolic lingering (verified: a BLA table
 // from an escaped reference certifies truly-escaping fringe pixels as
-// "interior"). Either way the pixel's dynamics can no longer be trusted, so
-// any BOUNDED verdict (interior, budget exhausted, parked) from a pixel
-// that spent a full doubling window starved — or took any BLA skip while
-// starved — returns BAD_REF: it must be recomputed against a reference
-// whose own orbit stays near the pixel's dynamics (the pool re-references
-// at such a pixel). Escapes are exempt: near-boundary escape values are
-// chaos-class under any reference, and rescuing them would churn forever.
+// "interior"). A pixel in that regime cannot be TRUSTED to certify
+// interior, so an interior verdict from it returns BAD_REF: recompute
+// against a reference whose own orbit stays near the pixel's dynamics (the
+// pool re-references at such a pixel). ONLY the interior verdict is
+// poisoned. Escapes are chaos-class under any reference, and unresolved
+// pixels (budget exhausted, parked on a short orbit) simply park and
+// escalate — a delta legitimately dwarfs its dc after enough growth, so
+// treating "starved at some point" as fatal blackened every slow-escaping
+// filament pixel (the z152 streak regression).
 export const BAD_REF = -2;
 const DC_STARVE = 2 ** 98; // (2^49)² — compared in squared magnitudes
 
@@ -242,7 +244,6 @@ export const perturbPixel = (
 
     if (m + 1 >= orbitLen) {
       if (!orbitEscaped) {
-        if (dcWeak) return BAD_REF;
         // Reference too short (truncated, not escaped): park unresolved.
         pixelState.ax = dzx;
         pixelState.ay = dzy;
@@ -331,7 +332,6 @@ export const perturbPixel = (
     m++;
   }
 
-  if (dcWeak) return BAD_REF;
   pixelState.ax = dzx;
   pixelState.ay = dzy;
   pixelState.s = 0;
@@ -548,7 +548,6 @@ export const perturbPixelDeep = (
     const dzMagF2 = dzxF * dzxF + dzyF * dzyF;
     if (m + 1 >= orbitLen) {
       if (!orbitEscaped) {
-        if (dcWeak) return BAD_REF;
         pixelState.ax = wx;
         pixelState.ay = wy;
         pixelState.s = s;
@@ -683,7 +682,6 @@ export const perturbPixelDeep = (
     }
   }
 
-  if (dcWeak) return BAD_REF;
   pixelState.ax = wx;
   pixelState.ay = wy;
   pixelState.s = s;
