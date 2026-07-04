@@ -54,7 +54,15 @@ const E2_CLAMP = 1e60;
 // treating "starved at some point" as fatal blackened every slow-escaping
 // filament pixel (the z152 streak regression).
 export const BAD_REF = -2;
-const DC_STARVE = 2 ** 98; // (2^49)² — compared in squared magnitudes
+// An interior verdict is distrusted only after MANY near-edge skips: the
+// verified corruption (escaped-ref false interiors) lingers near-parabolically
+// through hundreds of skips within 2^16 of their validity radii, while a
+// legitimate pixel diverging from the reference toward its own attracting
+// cycle transits that band in a few dozen. Measured: false interiors under
+// an escaped z75 reference take 62-70 loose skips; legitimate interiors at
+// a z122 minibrot max out at 47 (median 0). (Boolean flagging blackened
+// cross-attractor interiors and caused reference flip-flop churn.)
+const LOOSE_SKIP_TOLERANCE = 52;
 
 export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
   const y2 = cy * cy;
@@ -73,6 +81,8 @@ export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
 // Single-threaded module state: rows are computed synchronously, so this
 // never aliases between pixels.
 export const pixelState = { ax: 0, ay: 0, s: 0, m: 0, n: 0, e2: 1 };
+// Diagnostic: loose-skip count of the last bounded verdict (see BAD_REF).
+export const lastLooseSkips = { v: 0 };
 
 // Escape-time returns: smooth iteration count (> 0) on escape, 0 for
 // confirmed interior (attracting-cycle test), -1 when maxIters ran out
@@ -200,11 +210,7 @@ export const perturbPixel = (
   const ey = orbit[2 * (orbitLen - 1) + 1];
   const orbitEscaped = ex * ex + ey * ey > BAILOUT;
   const dcMag = Math.abs(dcx) + Math.abs(dcy);
-  // dc-starvation tracking (see BAD_REF above). The zero-dc pixel is the
-  // reference itself — never starved.
-  const dcStarve = (dcx * dcx + dcy * dcy) * DC_STARVE || Infinity;
-  let minDz2 = Infinity;
-  let dcWeak = false;
+  let looseSkips = 0;
   // + coercions: see escapeTime — unboxes the loop-carried floats (~2.4x).
   let dzx = +sdzx;
   let dzy = +sdzy;
@@ -225,18 +231,16 @@ export const perturbPixel = (
     }
 
     const dzMag2 = dzx * dzx + dzy * dzy;
-    if (dzMag2 < minDz2) minDz2 = dzMag2;
 
     if (n !== 0) {
       e2 *= 4 * zMag;
       if (e2 > E2_CLAMP) e2 = E2_CLAMP;
       if (e2 > e2Max) e2Max = e2;
       if (n >= nextCheck) {
-        // A full window during which dc never moved dz by more than a few
-        // ulps: this pixel's identity is numerically lost.
-        if (minDz2 > dcStarve) dcWeak = true;
-        minDz2 = Infinity;
-        if (e2Max < INTERIOR_E2) return dcWeak ? BAD_REF : 0;
+        if (e2Max < INTERIOR_E2) {
+          lastLooseSkips.v = looseSkips;
+          return looseSkips > LOOSE_SKIP_TOLERANCE ? BAD_REF : 0;
+        }
         e2Max = 0;
         while (nextCheck <= n) nextCheck *= 2;
       }
@@ -289,17 +293,12 @@ export const perturbPixel = (
         ) {
           continue;
         }
-        // Skips taken near the radius edge (or while dc is starved) are the
-        // regime where accumulated linearization error corrupts bounded
-        // dynamics — usable for escapes, untrustworthy for verdicts.
-        // (Verified: an escaped-reference table certifies truly-escaping
-        // fringe pixels "interior" until radii shrink by 2^16.)
-        if (
-          dzx * dzx + dzy * dzy > dcStarve ||
-          !(dzMag < lv.rz[j] * 2 ** -16)
-        ) {
-          dcWeak = true;
-        }
+        // Skips near the radius edge accumulate linearization error across
+        // near-parabolic lingering — fine for escapes, corrupting for
+        // bounded verdicts once there are many of them. (Verified: an
+        // escaped-reference table certifies truly-escaping fringe pixels
+        // "interior" until radii shrink by 2^16.)
+        if (!(dzMag < lv.rz[j] * 2 ** -16)) looseSkips++;
         const axv = lv.ax[j];
         const ayv = lv.ay[j];
         const bxv = lv.bx[j];
@@ -312,10 +311,6 @@ export const perturbPixel = (
         e2 *= axv * axv + ayv * ayv;
         if (e2 > E2_CLAMP) e2 = E2_CLAMP;
         if (e2 > e2Max) e2Max = e2;
-        // Keep starvation tracking honest across the skip (BLA applies only
-        // at small |dz|, so this can only lower the window minimum).
-        const bDz2 = dzx * dzx + dzy * dzy;
-        if (bDz2 < minDz2) minDz2 = bDz2;
         m += lv.len;
         n += lv.len - 1; // the loop increment supplies the last one
         skipped = true;
@@ -498,10 +493,7 @@ export const perturbPixelDeep = (
   // |dc| as float64 — 0 when genuinely below the float64 floor, which is the
   // correct value for the BLA rc comparisons (the bound holds a fortiori).
   const dcMagF = dcMag1 * 2 ** dcE;
-  // Starvation threshold in exponent space (float64 magnitudes underflow):
-  // starved when log2|dz| > log2|dc| + 49, with 34 bits of slack for the
-  // mantissa band, i.e. when s alone exceeds this.
-  const starveS = dcMag1 === 0 ? Infinity : dcE + Math.log2(dcMag1) + 49 + 34;
+  let looseSkips = 0;
 
   // + coercions: see escapeTime — unboxes the loop-carried floats (~2.4x).
   let wx = +swx;
@@ -511,8 +503,6 @@ export const perturbPixelDeep = (
   let m = sm;
   let e2 = +se2;
   let e2Max = 0;
-  let winMinS = Infinity;
-  let dcWeak = false;
   let nextCheck = INTERIOR_FIRST_CHECK;
   while (nextCheck <= n0) nextCheck *= 2;
 
@@ -525,16 +515,15 @@ export const perturbPixelDeep = (
     if (zMag > BAILOUT) {
       return n + 2 - Math.log(Math.log(zMag)) / LN_2;
     }
-    if (s < winMinS) winMinS = s;
 
     if (n !== 0) {
       e2 *= 4 * zMag;
       if (e2 > E2_CLAMP) e2 = E2_CLAMP;
       if (e2 > e2Max) e2Max = e2;
       if (n >= nextCheck) {
-        if (winMinS > starveS) dcWeak = true;
-        winMinS = Infinity;
-        if (e2Max < INTERIOR_E2) return dcWeak ? BAD_REF : 0;
+        if (e2Max < INTERIOR_E2) {
+          return looseSkips > LOOSE_SKIP_TOLERANCE ? BAD_REF : 0;
+        }
         e2Max = 0;
         while (nextCheck <= n) nextCheck *= 2;
       }
@@ -602,11 +591,8 @@ export const perturbPixelDeep = (
         ) {
           continue;
         }
-        // Same trust rules as the float64 path: a skip at the radius edge or
-        // in the starved regime poisons bounded verdicts.
-        if (dzMag > 0 && (s > starveS || !(dzMag < lv.rz[j] * 2 ** -16))) {
-          dcWeak = true;
-        }
+        // Same trust rule as the float64 path.
+        if (dzMag > 0 && !(dzMag < lv.rz[j] * 2 ** -16)) looseSkips++;
         // dz' = A·dz + B·dc, merged at the coarser scale.
         const pxm = axv * wx - ayv * wy;
         const pym = axv * wy + ayv * wx;
