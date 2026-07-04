@@ -17,6 +17,9 @@ export type TileJob = {
   maxIter: number;
   needsRef: boolean;
   priority: number;
+  // Set once the reference-rescue budget is spent: the worker then renders
+  // dc-starved pixels black instead of signalling again.
+  noRescue?: boolean;
 };
 
 type Reference = {
@@ -35,6 +38,13 @@ type InFlight = { key: string; workerIdx: number; job?: TileJob; isRef: boolean 
 // an efficiency threshold, not a correctness one.
 const REF_MAX_DRIFT_PX = 8192;
 
+// Reference rescues per reference generation: when tiles report dc-starved
+// pixels (an ESCAPING reference over a bounded region — spurious black blobs
+// swallowing minibrots), the pool re-references at a starved pixel. The cap
+// stops pathological flip-flopping between multiple bounded basins; past it,
+// tiles finalize with the (rare) remaining starved pixels black.
+const MAX_REF_RESCUES = 6;
+
 export class FractalEngine {
   private workers: WorkerSlot[] = [];
   private queue = new Map<string, TileJob>();
@@ -45,6 +55,7 @@ export class FractalEngine {
   private nextRefId = 1;
   private ref: Reference | null = null;
   private refJobPending = false;
+  private refRescues = 0;
 
   constructor(
     private onTile: (
@@ -106,6 +117,7 @@ export class FractalEngine {
       maxIter: Math.ceil(maxIter * 1.5) + 2048,
       status: "computing",
     };
+    this.refRescues = 0;
     this.refJobPending = true;
     this.pump();
     return false;
@@ -200,6 +212,7 @@ export class FractalEngine {
         size: job.size,
         maxIter: job.maxIter,
         refId: job.needsRef ? this.ref?.refId ?? null : null,
+        noRescue: job.noRescue ?? false,
       });
     }
   }
@@ -239,6 +252,35 @@ export class FractalEngine {
       case "no-ref": {
         // Worker's reference was evicted before this tile ran; requeue it.
         const meta = this.free(msg.id);
+        if (meta?.job) this.requeue(meta.job);
+        this.pump();
+        break;
+      }
+
+      case "ref-unsuitable": {
+        // The tile has bounded pixels whose dc no longer registers against
+        // this (escaping) reference: re-reference at one of them — its orbit
+        // is bounded, so it stays near the whole region's dynamics — and
+        // requeue the tile behind the new orbit. Signals racing in while a
+        // rescue is already computing just requeue and wait for it.
+        const meta = this.free(msg.id);
+        const r = this.ref;
+        if (r && r.status === "ready") {
+          if (this.refRescues < MAX_REF_RESCUES) {
+            this.refRescues++;
+            this.ref = {
+              refId: this.nextRefId++,
+              cxFP: rescale(msg.cxFP, msg.bits, r.bits),
+              cyFP: rescale(msg.cyFP, msg.bits, r.bits),
+              bits: r.bits,
+              maxIter: r.maxIter,
+              status: "computing",
+            };
+            this.refJobPending = true;
+          } else if (meta?.job) {
+            meta.job.noRescue = true;
+          }
+        }
         if (meta?.job) this.requeue(meta.job);
         this.pump();
         break;

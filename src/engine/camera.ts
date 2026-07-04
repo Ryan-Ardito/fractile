@@ -17,6 +17,14 @@ export const TILE_SIZE = 256;
 export const BASE_ITERATIONS = 1024;
 // Below this level, float64 addresses pixels directly; above it, perturbation.
 export const PERTURB_MIN_LEVEL = 36;
+// Use BLA only from this level down. Its validity radii are tuned for
+// escape-time accuracy (chaos-class); in the band where pixel deltas are
+// large enough to sit within ~2^16 of the radii (levels ~36-96),
+// near-parabolic error accumulation can corrupt BOUNDED verdicts (false
+// "interior" — black blobs swallowing minibrots), and BLA's measured
+// speedup there is ~1x anyway. Deeper, deltas are astronomically far inside
+// the radii: safe and where the speedup actually lives.
+export const BLA_MIN_LEVEL = 96;
 
 // Adaptive iterations (shared by the worker and the viewer): a tile whose
 // ran-out pixel count exceeds the threshold keeps iterating — the worker

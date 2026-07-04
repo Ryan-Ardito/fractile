@@ -30,6 +30,25 @@ const INTERIOR_E2 = 1e-12;
 const INTERIOR_FIRST_CHECK = 64;
 const E2_CLAMP = 1e60;
 
+// Reference-unsuitability (dc-starvation) detection. Perturbation is only
+// meaningful while the pixel's dc stays numerically significant in
+// dz' = (2Z + dz)·dz + dc. When the reference orbit ESCAPES but the pixel
+// stays bounded (a minibrot under an exterior reference), rebasing leaves
+// |dz| at O(1) — once |dz| exceeds |dc| by ~2^49, plain steps apply dc
+// within a few ulps of zero effect, and BLA skips taken at such dz sit at
+// the edge of their validity radii where linearization error accumulates
+// systematically across near-parabolic lingering (verified: a BLA table
+// from an escaped reference certifies truly-escaping fringe pixels as
+// "interior"). Either way the pixel's dynamics can no longer be trusted, so
+// any BOUNDED verdict (interior, budget exhausted, parked) from a pixel
+// that spent a full doubling window starved — or took any BLA skip while
+// starved — returns BAD_REF: it must be recomputed against a reference
+// whose own orbit stays near the pixel's dynamics (the pool re-references
+// at such a pixel). Escapes are exempt: near-boundary escape values are
+// chaos-class under any reference, and rescuing them would churn forever.
+export const BAD_REF = -2;
+const DC_STARVE = 2 ** 98; // (2^49)² — compared in squared magnitudes
+
 export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
   const y2 = cy * cy;
   const q = (cx - 0.25) ** 2 + y2;
@@ -138,7 +157,10 @@ export function* referenceOrbit(
 // Delta iteration against a reference orbit. dz' = (2Z + dz)·dz + dc.
 // Rebase (dz ← full z, restart at orbit index 0) when the orbit runs out or
 // the full value falls below the delta — this is what makes a single
-// reference valid for every pixel with no glitch heuristics.
+// reference valid for every pixel's ESCAPING dynamics with no glitch
+// heuristics. Bounded pixels additionally need the reference to keep dz
+// small so dc stays significant; a bounded verdict from a dc-starved pixel
+// returns BAD_REF instead (see above).
 // Pass n0/sdzx/sdzy/sm from a previous -1 (via pixelState) to resume.
 // With a BLA table, block-aligned stretches where the delta is inside the
 // entry's validity radius are skipped in one linear application.
@@ -166,6 +188,11 @@ export const perturbPixel = (
   const ey = orbit[2 * (orbitLen - 1) + 1];
   const orbitEscaped = ex * ex + ey * ey > BAILOUT;
   const dcMag = Math.abs(dcx) + Math.abs(dcy);
+  // dc-starvation tracking (see BAD_REF above). The zero-dc pixel is the
+  // reference itself — never starved.
+  const dcStarve = (dcx * dcx + dcy * dcy) * DC_STARVE || Infinity;
+  let minDz2 = Infinity;
+  let dcWeak = false;
   let dzx = sdzx;
   let dzy = sdzy;
   let m = sm;
@@ -184,12 +211,19 @@ export const perturbPixel = (
       return n + 2 - Math.log(Math.log(zMag)) / LN_2;
     }
 
+    const dzMag2 = dzx * dzx + dzy * dzy;
+    if (dzMag2 < minDz2) minDz2 = dzMag2;
+
     if (n !== 0) {
       e2 *= 4 * zMag;
       if (e2 > E2_CLAMP) e2 = E2_CLAMP;
       if (e2 > e2Max) e2Max = e2;
       if (n >= nextCheck) {
-        if (e2Max < INTERIOR_E2) return 0;
+        // A full window during which dc never moved dz by more than a few
+        // ulps: this pixel's identity is numerically lost.
+        if (minDz2 > dcStarve) dcWeak = true;
+        minDz2 = Infinity;
+        if (e2Max < INTERIOR_E2) return dcWeak ? BAD_REF : 0;
         e2Max = 0;
         while (nextCheck <= n) nextCheck *= 2;
       }
@@ -197,6 +231,7 @@ export const perturbPixel = (
 
     if (m + 1 >= orbitLen) {
       if (!orbitEscaped) {
+        if (dcWeak) return BAD_REF;
         // Reference too short (truncated, not escaped): park unresolved.
         pixelState.ax = dzx;
         pixelState.ay = dzy;
@@ -210,7 +245,7 @@ export const perturbPixel = (
       m = 0;
       refX = 0;
       refY = 0;
-    } else if (zMag < dzx * dzx + dzy * dzy) {
+    } else if (zMag < dzMag2) {
       dzx = zx;
       dzy = zy;
       m = 0;
@@ -241,6 +276,17 @@ export const perturbPixel = (
         ) {
           continue;
         }
+        // Skips taken near the radius edge (or while dc is starved) are the
+        // regime where accumulated linearization error corrupts bounded
+        // dynamics — usable for escapes, untrustworthy for verdicts.
+        // (Verified: an escaped-reference table certifies truly-escaping
+        // fringe pixels "interior" until radii shrink by 2^16.)
+        if (
+          dzx * dzx + dzy * dzy > dcStarve ||
+          !(dzMag < lv.rz[j] * 2 ** -16)
+        ) {
+          dcWeak = true;
+        }
         const axv = lv.ax[j];
         const ayv = lv.ay[j];
         const bxv = lv.bx[j];
@@ -253,6 +299,10 @@ export const perturbPixel = (
         e2 *= axv * axv + ayv * ayv;
         if (e2 > E2_CLAMP) e2 = E2_CLAMP;
         if (e2 > e2Max) e2Max = e2;
+        // Keep starvation tracking honest across the skip (BLA applies only
+        // at small |dz|, so this can only lower the window minimum).
+        const bDz2 = dzx * dzx + dzy * dzy;
+        if (bDz2 < minDz2) minDz2 = bDz2;
         m += lv.len;
         n += lv.len - 1; // the loop increment supplies the last one
         skipped = true;
@@ -269,6 +319,7 @@ export const perturbPixel = (
     m++;
   }
 
+  if (dcWeak) return BAD_REF;
   pixelState.ax = dzx;
   pixelState.ay = dzy;
   pixelState.m = m;
@@ -297,6 +348,11 @@ export type UnresolvedBuf = {
   n: Int32Array;
   e2: Float64Array;
 };
+
+// Bad-reference report for a row pass: how many pixels returned BAD_REF and
+// the dc of the first one — the natural center for a rescue reference (its
+// orbit is bounded, so it stays near the whole region's dynamics).
+export type BadRefBuf = { count: number; dcx: number; dcy: number };
 
 export const makeUnresolvedBuf = (capacity: number): UnresolvedBuf => ({
   count: 0,
@@ -363,7 +419,8 @@ export const perturbRows = (
   rowEnd: number,
   out: Float32Array,
   un?: UnresolvedBuf,
-  bla: BlaTable | null = null
+  bla: BlaTable | null = null,
+  bad?: BadRefBuf
 ): number => {
   let ranOut = 0;
   for (let py = rowStart; py < rowEnd; py++) {
@@ -372,7 +429,15 @@ export const perturbRows = (
     for (let px = 0; px < size; px++) {
       const dcx = dcx0 + (px + 0.5) * step;
       const v = perturbPixel(dcx, dcy, orbit, maxIter, 0, 0, 0, 0, bla);
-      if (v < 0) {
+      if (v === BAD_REF) {
+        if (bad) {
+          if (bad.count === 0) {
+            bad.dcx = dcx;
+            bad.dcy = dcy;
+          }
+          bad.count++;
+        }
+      } else if (v < 0) {
         ranOut++;
         if (un) recordUnresolved(un, rowIdx + px);
       }

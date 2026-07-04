@@ -3,6 +3,7 @@
 // and 'set-reference' messages are processed mid-tile.
 
 import {
+  BAD_REF,
   BAILOUT,
   directRows,
   escapeTime,
@@ -13,12 +14,13 @@ import {
   referenceOrbit,
 } from "./engine/mandelbrot";
 import {
+  BLA_MIN_LEVEL,
   ITER_ESCALATION,
   ITER_HARD_CAP,
   RANOUT_PIXEL_THRESHOLD,
 } from "./engine/camera";
 import { BlaTable, buildBla } from "./engine/bla";
-import { fixedToFloat } from "./engine/fixedPoint";
+import { fixedToFloat, floatToFixed } from "./engine/fixedPoint";
 
 type Reference = {
   orbit: Float64Array;
@@ -40,6 +42,9 @@ type TileMsg = {
   size: number;
   maxIter: number;
   refId: number | null;
+  // The pool's reference-rescue budget is exhausted: render dc-starved
+  // pixels black instead of signalling ref-unsuitable again.
+  noRescue?: boolean;
 };
 
 type ReferenceMsg = {
@@ -94,10 +99,41 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   const t0 = performance.now();
   const out = new Float32Array(size * size);
   const un = makeUnresolvedBuf(size * size);
+  const bad = { count: 0, dcx: 0, dcy: 0 };
+
+  // Bounded verdicts from dc-starved pixels mean the reference orbit escapes
+  // while these pixels don't (a minibrot under an exterior reference): hand
+  // the tile back so the pool can re-reference at one of them. With the
+  // rescue budget exhausted, they render black — the pre-detection look.
+  const reportBadRef = (): void => {
+    if (un.count + bad.count < size * size) {
+      post({
+        type: "tile-progress",
+        id,
+        key,
+        data: out.slice(),
+        ranOut: un.count + bad.count,
+        iterDone: maxIter,
+        maxFinite: maxFiniteOf(out),
+        costMs: performance.now() - t0,
+      });
+    }
+    // Rescue center in absolute fixed-point (relative to the reference this
+    // tile actually used — the pool's active reference may have moved on).
+    post({
+      type: "ref-unsuitable",
+      id,
+      key,
+      cxFP: refObj!.cxFP + floatToFixed(bad.dcx, refObj!.bits),
+      cyFP: refObj!.cyFP + floatToFixed(bad.dcy, refObj!.bits),
+      bits: refObj!.bits,
+    });
+  };
 
   // Perturbation setup (deep tiles); null means the direct float64 path.
   let orbit: Float64Array | null = null;
   let bla: BlaTable | null = null;
+  let refObj: Reference | null = null;
   let dcx0 = 0;
   let dcy0 = 0;
   const tileW = 16 * 2 ** -level;
@@ -108,13 +144,16 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       post({ type: "no-ref", id, key });
       return;
     }
+    refObj = ref;
     orbit = ref.orbit;
     const shift = BigInt(ref.bits + 4 - level);
     const eight = 8n << BigInt(ref.bits);
     dcx0 = fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits);
     dcy0 = fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits);
-    if (!ref.bla) ref.bla = buildBla(ref.orbit);
-    bla = ref.bla;
+    if (level >= BLA_MIN_LEVEL) {
+      if (!ref.bla) ref.bla = buildBla(ref.orbit);
+      bla = ref.bla;
+    }
   }
   const x0 = orbit ? dcx0 : Number(tx) * tileW - 8;
   const y0 = orbit ? dcy0 : Number(ty) * tileW - 8;
@@ -135,7 +174,10 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   for (let row = 0; row < size; row += ROW_BAND) {
     const rowEnd = Math.min(row + ROW_BAND, size);
     if (orbit) {
-      perturbRows(dcx0, dcy0, step, size, budget, orbit, row, rowEnd, out, un, bla);
+      perturbRows(
+        dcx0, dcy0, step, size, budget, orbit, row, rowEnd, out, un, bla,
+        msg.noRescue ? undefined : bad
+      );
     } else {
       directRows(level, Number(tx), Number(ty), size, budget, row, rowEnd, out, un);
     }
@@ -145,6 +187,10 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       post({ type: "aborted", id, key });
       return;
     }
+  }
+  if (bad.count > 0) {
+    reportBadRef();
+    return;
   }
 
   // Adaptive escalation: resume only the unresolved pixels with ever-larger
@@ -179,7 +225,14 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       const v = orbit
         ? perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
         : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i], un.e2[i]);
-      if (v < 0) {
+      if (v === BAD_REF && !msg.noRescue) {
+        if (bad.count === 0) {
+          bad.dcx = cx;
+          bad.dcy = cy;
+        }
+        bad.count++;
+        out[idx] = 0;
+      } else if (v < 0 && v !== BAD_REF) {
         un.idx[write] = idx;
         un.ax[write] = pixelState.ax;
         un.ay[write] = pixelState.ay;
@@ -188,7 +241,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         un.e2[write] = pixelState.e2;
         write++;
       } else {
-        out[idx] = v;
+        out[idx] = v > 0 ? v : 0;
         if (v > maxFinite) maxFinite = v;
       }
       if ((i & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
@@ -202,6 +255,10 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     }
     un.count = write;
     budget = next;
+    if (bad.count > 0) {
+      reportBadRef();
+      return;
+    }
     // No early exit on a fruitless round: an escape band can start above
     // several ladder rungs at once (fresh deep views), and true interiors
     // resolve via cycle detection long before the hard cap anyway.
