@@ -63,6 +63,7 @@ export const BAD_REF = -2;
 // a z122 minibrot max out at 47 (median 0). (Boolean flagging blackened
 // cross-attractor interiors and caused reference flip-flop churn.)
 const LOOSE_SKIP_TOLERANCE = 52;
+const LOOSE_EDGE = 2 ** -16;
 
 export const isInCardioidOrBulb = (cx: number, cy: number): boolean => {
   const y2 = cy * cy;
@@ -298,7 +299,7 @@ export const perturbPixel = (
         // bounded verdicts once there are many of them. (Verified: an
         // escaped-reference table certifies truly-escaping fringe pixels
         // "interior" until radii shrink by 2^16.)
-        if (!(dzMag < lv.rz[j] * 2 ** -16)) looseSkips++;
+        if (!(dzMag < lv.rz[j] * LOOSE_EDGE)) looseSkips++;
         const axv = lv.ax[j];
         const ayv = lv.ay[j];
         const bxv = lv.bx[j];
@@ -500,6 +501,11 @@ export const perturbPixelDeep = (
   let wy = +swy;
   let s = ss;
   let p2s = 2 ** s;
+  // dc mantissa rescaled to the CURRENT dz scale: u·fDc adds dc in one
+  // multiply per step. Recomputed (never incrementally scaled) at every
+  // s-change site so an underflowed factor becomes representable again as
+  // s falls back toward dcE.
+  let fDc = 2 ** (dcE - s);
   let m = sm;
   let e2 = +se2;
   let e2Max = 0;
@@ -509,8 +515,12 @@ export const perturbPixelDeep = (
   for (let n = n0; n < maxIter; n++) {
     let refX = orbit[2 * m];
     let refY = orbit[2 * m + 1];
-    const zx = refX + wx * p2s;
-    const zy = refY + wy * p2s;
+    // dz in float64 (0 when unrepresentably small), computed ONCE per
+    // iteration and reassigned only in the rare rebase branches.
+    let dzxF = wx * p2s;
+    let dzyF = wy * p2s;
+    const zx = refX + dzxF;
+    const zy = refY + dzyF;
     const zMag = zx * zx + zy * zy;
     if (zMag > BAILOUT) {
       return n + 2 - Math.log(Math.log(zMag)) / LN_2;
@@ -529,11 +539,9 @@ export const perturbPixelDeep = (
       }
     }
 
-    // Rebase / wrap: the float64 image of dz (0 when unrepresentably small)
-    // gives exactly the right comparisons — an invisible delta never
-    // outweighs z, and a wrap only happens once the delta is O(z) anyway.
-    const dzxF = wx * p2s;
-    const dzyF = wy * p2s;
+    // Rebase / wrap: the float64 image of dz gives exactly the right
+    // comparisons — an invisible delta never outweighs z, and a wrap only
+    // happens once the delta is O(z) anyway.
     const dzMagF2 = dzxF * dzxF + dzyF * dzyF;
     if (m + 1 >= orbitLen) {
       if (!orbitEscaped) {
@@ -549,6 +557,9 @@ export const perturbPixelDeep = (
       wy = zy;
       s = 0;
       p2s = 1;
+      fDc = 2 ** dcE;
+      dzxF = zx;
+      dzyF = zy;
       refX = 0;
       refY = 0;
     } else if (zMag < dzMagF2) {
@@ -556,6 +567,9 @@ export const perturbPixelDeep = (
       wy = zy;
       s = 0;
       p2s = 1;
+      fDc = 2 ** dcE;
+      dzxF = zx;
+      dzyF = zy;
       refX = 0;
       refY = 0;
     }
@@ -592,19 +606,17 @@ export const perturbPixelDeep = (
           continue;
         }
         // Same trust rule as the float64 path.
-        if (dzMag > 0 && !(dzMag < lv.rz[j] * 2 ** -16)) looseSkips++;
+        if (dzMag > 0 && !(dzMag < lv.rz[j] * LOOSE_EDGE)) looseSkips++;
         // dz' = A·dz + B·dc, merged at the coarser scale.
         const pxm = axv * wx - ayv * wy;
         const pym = axv * wy + ayv * wx;
         const qxm = bxv * ux - byv * uy;
         const qym = bxv * uy + byv * ux;
-        const d = s - dcE;
-        if (d >= 0) {
-          const f = 2 ** -d;
-          wx = pxm + qxm * f;
-          wy = pym + qym * f;
+        if (s >= dcE) {
+          wx = pxm + qxm * fDc;
+          wy = pym + qym * fDc;
         } else {
-          const f = 2 ** d;
+          const f = 2 ** (s - dcE);
           wx = pxm * f + qxm;
           wy = pym * f + qym;
           s = dcE;
@@ -628,28 +640,26 @@ export const perturbPixelDeep = (
           s += k;
         }
         p2s = 2 ** s;
+        fDc = 2 ** (dcE - s);
         continue;
       }
     }
 
     // Plain step: dz' = (2Z + dz)·dz + dc = 2^s·((2Z + dz)·w) + 2^dcE·u.
-    const dxF = wx * p2s;
-    const dyF = wy * p2s;
-    const sx = 2 * refX + dxF;
-    const sy = 2 * refY + dyF;
+    const sx = 2 * refX + dzxF;
+    const sy = 2 * refY + dzyF;
     const pxm = sx * wx - sy * wy;
     const pym = sx * wy + sy * wx;
-    const d = s - dcE;
-    if (d >= 0) {
-      const f = 2 ** -d;
-      wx = pxm + ux * f;
-      wy = pym + uy * f;
+    if (s >= dcE) {
+      wx = pxm + ux * fDc;
+      wy = pym + uy * fDc;
     } else {
-      const f = 2 ** d;
+      const f = 2 ** (s - dcE);
       wx = pxm * f + ux;
       wy = pym * f + uy;
       s = dcE;
       p2s = 2 ** s;
+      fDc = 1;
     }
     m++;
     // Growth per plain step is bounded (|2Z + dz| < 2·bailout), so one band
@@ -660,11 +670,13 @@ export const perturbPixelDeep = (
       wy *= W_LO;
       s += 32;
       p2s = 2 ** s;
+      fDc = 2 ** (dcE - s);
     } else if (wm !== 0 && wm < W_LO) {
       wx *= W_HI;
       wy *= W_HI;
       s -= 32;
       p2s = 2 ** s;
+      fDc = 2 ** (dcE - s);
     }
   }
 
