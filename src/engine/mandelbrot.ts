@@ -85,11 +85,15 @@ export const escapeTime = (
   szy = 0,
   se2 = 1
 ): number => {
-  let zx = szx;
-  let zy = szy;
+  // The unary + on parameter-seeded loop floats is load-bearing: without an
+  // explicit ToNumber, V8 gives these loop-carried variables a boxed
+  // representation and the whole loop runs ~2.4x slower (heap-number
+  // allocation per iteration). Measured on the perturbation loop, node 24.
+  let zx = +szx;
+  let zy = +szy;
   let x2 = zx * zx;
   let y2 = zy * zy;
-  let e2 = se2;
+  let e2 = +se2;
   let e2Max = 0;
   let nextCheck = INTERIOR_FIRST_CHECK;
   while (nextCheck <= n0) nextCheck *= 2;
@@ -199,10 +203,11 @@ export const perturbPixel = (
   const dcStarve = (dcx * dcx + dcy * dcy) * DC_STARVE || Infinity;
   let minDz2 = Infinity;
   let dcWeak = false;
-  let dzx = sdzx;
-  let dzy = sdzy;
+  // + coercions: see escapeTime — unboxes the loop-carried floats (~2.4x).
+  let dzx = +sdzx;
+  let dzy = +sdzy;
   let m = sm;
-  let e2 = se2;
+  let e2 = +se2;
   let e2Max = 0;
   let nextCheck = INTERIOR_FIRST_CHECK;
   while (nextCheck <= n0) nextCheck *= 2;
@@ -498,12 +503,13 @@ export const perturbPixelDeep = (
   // mantissa band, i.e. when s alone exceeds this.
   const starveS = dcMag1 === 0 ? Infinity : dcE + Math.log2(dcMag1) + 49 + 34;
 
-  let wx = swx;
-  let wy = swy;
+  // + coercions: see escapeTime — unboxes the loop-carried floats (~2.4x).
+  let wx = +swx;
+  let wy = +swy;
   let s = ss;
   let p2s = 2 ** s;
   let m = sm;
-  let e2 = se2;
+  let e2 = +se2;
   let e2Max = 0;
   let winMinS = Infinity;
   let dcWeak = false;
