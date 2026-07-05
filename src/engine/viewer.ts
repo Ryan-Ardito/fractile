@@ -381,22 +381,25 @@ export class FractalViewer {
   }
 
   // Pin a tile and resolve once a movie-quality version is cached: any
-  // finished job, or a provisional frame at the screen-parity budget (see
-  // the budget comment above EXPORT_PRIORITY). Meeting it mid-ladder
-  // accepts early and cancels the rest of the job. Synthesis from cached
-  // children is tried before computing, so acquiring deeper tiles before
-  // their parents makes shallower levels' central regions nearly free.
+  // finished job, or a provisional frame at the movie's budget for this
+  // level (see the budget comment above EXPORT_PRIORITY). Meeting it
+  // mid-ladder accepts early and cancels the rest of the job. Synthesis
+  // (including the upgrade path) is tried on every look: the export walks
+  // deepest-first exactly so each level's central region — where a deep
+  // destination's high iteration needs live — inherits refined data from
+  // its children for free instead of recomputing it starved.
   async exportAcquire(level: number, tx: bigint, ty: bigint): Promise<void> {
     const key = this.tileKey(level, tx, ty);
     this.exportPinned.add(key);
-    const target =
+    const base =
       BASE_ITERATIONS * Math.max(1, Math.min(level, PERTURB_MIN_LEVEL));
+    const target = base;
     const tAcq = performance.now();
     let firstLook = true;
     for (;;) {
       if (!this.exportActive) throw new Error("export session ended");
       let entry = this.cache.get(key);
-      if (!entry && this.trySynthesize(level, tx, ty, true)) {
+      if (this.trySynthesize(level, tx, ty, true)) {
         entry = this.cache.get(key);
       }
       if (
@@ -440,7 +443,7 @@ export class FractalViewer {
         tx,
         ty,
         size: TILE_SIZE,
-        maxIter: target,
+        maxIter: base,
         needsRef,
         priority: EXPORT_PRIORITY,
       });
@@ -678,8 +681,8 @@ export class FractalViewer {
       if (this.prewarmKeys.has(key)) return;
       this.prewarmKeys.add(key);
       budget--;
+      this.trySynthesize(level, tx, ty);
       if (this.cache.has(key) || this.pendingTiles.has(key)) return;
-      if (this.trySynthesize(level, tx, ty)) return;
       this.engine.requestTile({
         key,
         level,
@@ -728,6 +731,16 @@ export class FractalViewer {
   // GPU-subsampling them instead of computing it — microseconds instead of
   // a worker job. Synthesized tiles carry near-zero cost, so eviction sheds
   // them first; resynthesis is nearly free while the children live.
+  //
+  // This is also an UPGRADE path, not just a miss path: children carry the
+  // refined truth outward from a deep view, and a cached tile computed at
+  // a starved budget (black centers around minibrots) must not block it.
+  // An existing tile is replaced when the children's floor beats it by a
+  // full escalation rung (4x) — the starvation signature — or by anything
+  // at all while it is still provisional; equal-quality neighbors differ
+  // only by noise and never churn. Because upgrades re-fire as children
+  // improve, refinement propagates level by level toward the surface.
+  //
   // allowProvisional (export only): accept full-size children that are
   // still refining; the result inherits needsMore so the view upgrades it.
   private trySynthesize(
@@ -747,6 +760,15 @@ export class FractalViewer {
         kids.push(kid);
       }
     }
+    const synthIter = Math.min(...kids.map((k) => k.maxIter));
+    const key = this.tileKey(level, tx, ty);
+    const existing = this.cache.get(key);
+    if (existing && existing.tex.size >= TILE_SIZE) {
+      const required = existing.needsMore
+        ? existing.maxIter + 1
+        : existing.maxIter * 4;
+      if (synthIter < required) return false;
+    }
     const tex = this.renderer.synthesizeTile([
       kids[0].tex,
       kids[1].tex,
@@ -757,11 +779,13 @@ export class FractalViewer {
     // Diagnostic: visible in the console as window.__fractileSynth.
     (globalThis as { __fractileSynth?: number }).__fractileSynth =
       ((globalThis as { __fractileSynth?: number }).__fractileSynth ?? 0) + 1;
-    this.cache.set(this.tileKey(level, tx, ty), {
+    if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
+    this.cache.set(key, {
       tex,
-      prevTex: null,
+      // Replacements fade in over the outgoing texture like any commit.
+      prevTex: existing ? existing.tex : null,
       loadedAt: performance.now(),
-      maxIter: Math.min(...kids.map((k) => k.maxIter)),
+      maxIter: synthIter,
       maxFinite: Math.max(...kids.map((k) => k.maxFinite)),
       needsMore: kids.some((k) => k.needsMore),
       level,
@@ -814,8 +838,27 @@ export class FractalViewer {
     final: boolean
   ): void {
     const existing = this.cache.get(key);
-    if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
     const size = Math.round(Math.sqrt(data.length));
+    // Never replace better data with worse: a synthesis upgrade may have
+    // landed while this job was running, and its child-inherited budget can
+    // exceed anything the job computed. Waiters still fire (the entry they
+    // find is the superior one), and a final full-size commit marks the
+    // survivor done so the visible loop stops re-requesting it.
+    if (
+      existing &&
+      existing.tex.size >= size &&
+      existing.maxIter >= iterDone
+    ) {
+      if (final && size >= TILE_SIZE) existing.needsMore = false;
+      const stale = this.tileWaiters.get(key);
+      if (stale) {
+        this.tileWaiters.delete(key);
+        for (const w of stale) w();
+      }
+      this.dirty = true;
+      return;
+    }
+    if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
     const tex = this.renderer.uploadTile(data, size);
     const level = levelOfKey(key);
     // Replacements keep the outgoing texture and fade the new one in over it
@@ -1015,7 +1058,9 @@ export class FractalViewer {
       const key = this.tileKey(vis.level, t.tx, t.ty);
       wanted.add(key);
       let entry = this.touch(key);
-      if (!entry && this.trySynthesize(vis.level, t.tx, t.ty)) {
+      // Miss OR upgrade: children may carry refined data a starved cached
+      // tile lacks (zooming out of a deep view) — trySynthesize self-gates.
+      if (this.trySynthesize(vis.level, t.tx, t.ty)) {
         entry = this.touch(key);
       }
       const xDev = t.x * dpr;
@@ -1103,7 +1148,8 @@ export class FractalViewer {
         if (parents.has(key)) continue;
         parents.add(key);
         wanted.add(key);
-        if (!this.cache.has(key) && !this.trySynthesize(parentLevel, ptx, pty)) {
+        this.trySynthesize(parentLevel, ptx, pty);
+        if (!this.cache.has(key)) {
           this.engine.requestTile({
             key,
             level: parentLevel,
