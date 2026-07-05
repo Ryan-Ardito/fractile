@@ -42,6 +42,13 @@ export type BlaLevel = {
   by: Float64Array;
   rz: Float64Array;
   rc: Float64Array;
+  // Max SQUARED partial |prod 2Z| along the block (s = 1..len). The interior
+  // test's running-max defense needs the within-period e2 peaks; a skip only
+  // exposes e2 at block ends, and near-parabolic cycles can phase-lock those
+  // sample points into low-e2 phases — false interior verdicts (verified at
+  // a period-5652 component edge: plain e2 never dropped below 1e4 while the
+  // BLA-sampled maxima fired the verdict). Skips contribute e2·pk to the max.
+  pk: Float64Array;
 };
 
 export type BlaTable = { levels: BlaLevel[] };
@@ -62,6 +69,7 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
   const by = new Float64Array(blocks);
   const rz = new Float64Array(blocks);
   const rc = new Float64Array(blocks);
+  const pk = new Float64Array(blocks);
   for (let j = 0; j < blocks; j++) {
     const m0 = j * BLA_LMIN;
     // Sub-step 0 constraint: |dz| ≤ ε|Z| with the identity map (no dc term
@@ -73,6 +81,7 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
     let accBy = 0;
     let accRz = eps * mag(orbit[2 * m0], orbit[2 * m0 + 1]);
     let accRc = Infinity;
+    let accPk = accAx * accAx + accAy * accAy;
     for (let s = 1; s < BLA_LMIN; s++) {
       const m = m0 + s;
       const zx = orbit[2 * m];
@@ -90,6 +99,8 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
       const nBx = sAx * accBx - sAy * accBy + 1;
       accBy = sAx * accBy + sAy * accBx;
       accBx = nBx;
+      const a2 = accAx * accAx + accAy * accAy;
+      if (a2 > accPk) accPk = a2;
     }
     ax[j] = accAx;
     ay[j] = accAy;
@@ -97,8 +108,9 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
     by[j] = accBy;
     rz[j] = accRz;
     rc[j] = accRc;
+    pk[j] = accPk;
   }
-  levels.push({ len: BLA_LMIN, ax, ay, bx, by, rz, rc });
+  levels.push({ len: BLA_LMIN, ax, ay, bx, by, rz, rc, pk });
 
   // Merge pairs upward until a single entry spans (nearly) the whole orbit.
   // The follower y must see |A_x·dz + B_x·dc| ≤ rz_y; same lopsided split.
@@ -112,6 +124,7 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
       by: new Float64Array(n2),
       rz: new Float64Array(n2),
       rc: new Float64Array(n2),
+      pk: new Float64Array(n2),
     };
     for (let j = 0; j < n2; j++) {
       const a = 2 * j;
@@ -125,6 +138,10 @@ export const buildBla = (orbit: Float64Array, eps = EPS): BlaTable => {
         prev.rc[b],
         ((1 - ZSPLIT) * prev.rz[b]) / mag(prev.bx[a], prev.by[a])
       );
+      // Peak partial across the pair: first half's peak, or the first
+      // half's full |A|² carrying into the second half's peak.
+      const aMag2 = prev.ax[a] * prev.ax[a] + prev.ay[a] * prev.ay[a];
+      lvl.pk[j] = Math.max(prev.pk[a], aMag2 * prev.pk[b]);
       lvl.ax[j] = prev.ax[b] * prev.ax[a] - prev.ay[b] * prev.ay[a];
       lvl.ay[j] = prev.ax[b] * prev.ay[a] + prev.ay[b] * prev.ax[a];
       lvl.bx[j] = prev.ax[b] * prev.bx[a] - prev.ay[b] * prev.by[a] + prev.bx[b];

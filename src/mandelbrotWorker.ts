@@ -5,6 +5,7 @@
 import {
   BAD_REF,
   BAILOUT,
+  confirmInterior,
   directRows,
   escapeTime,
   makeUnresolvedBuf,
@@ -98,6 +99,10 @@ const tick = (): Promise<void> =>
 const ROW_BAND = 16;
 // Escalation passes yield for cancel/set-reference between chunks of pixels.
 const ESCALATE_CHUNK = 2048;
+// Tile-level canary (see below): sample size and the black-region size that
+// warrants checking — blobs, not dust.
+const CANARY_COUNT = 8;
+const CANARY_MIN_BLACK = 2048;
 // Wall-clock ceiling for a tile's adaptive escalation: where BLA compresses
 // deep budgets, rungs are cheap and the ladder runs to the iteration cap;
 // where it can't (shallow band, unsuitable reference), stop honestly rather
@@ -122,6 +127,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   const out = new Float32Array(phys * phys);
   const un = makeUnresolvedBuf(phys * phys);
   const bad = { count: 0, dcx: 0, dcy: 0, e: 0 };
+  const conf = { streak: 0 };
   const deep = level >= DEEP_MIN_LEVEL;
 
   // Bounded verdicts from dc-starved pixels mean the reference orbit escapes
@@ -229,12 +235,12 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     if (orbit && deep) {
       perturbRowsDeep(
         dcx0, dcy0, dcE, phys, budget, orbit, row, rowEnd, out, un, bla,
-        msg.noRescue ? undefined : bad
+        msg.noRescue ? undefined : bad, conf
       );
     } else if (orbit) {
       perturbRows(
         dcx0, dcy0, step, phys, budget, orbit, row, rowEnd, out, un, bla,
-        msg.noRescue ? undefined : bad
+        msg.noRescue ? undefined : bad, conf
       );
     } else {
       directRows(x0, y0, step, phys, budget, row, rowEnd, out, un);
@@ -285,11 +291,20 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       const py = (idx / phys) | 0;
       const cx = x0 + (px + 0.5) * pixStep;
       const cy = y0 + (py + 0.5) * pixStep;
-      const v = orbit
+      let v = orbit
         ? deep
           ? perturbPixelDeep(cx, cy, dcE, orbit, next, un.n[i], un.ax[i], un.ay[i], un.s[i], un.m[i], bla, un.e2[i])
           : perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
         : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i], un.e2[i]);
+      if (v === 0 && orbit && bla !== null) {
+        v = confirmInterior(
+          conf, idx, pixelState.n,
+          (b) => deep
+            ? perturbPixelDeep(cx, cy, dcE, orbit!, b, 0, 0, 0, dcE, 0)
+            : perturbPixel(cx, cy, orbit!, b),
+          next
+        );
+      }
       if (v === BAD_REF && !msg.noRescue) {
         if (bad.count === 0) {
           bad.dcx = cx;
@@ -329,6 +344,55 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     // No early exit on a fruitless round: an escape band can start above
     // several ladder rungs at once (fresh deep views), and true interiors
     // resolve via cycle detection long before the hard cap anyway.
+  }
+
+  // Tile-level canary against BLA trajectory corruption: the per-fire
+  // confirmation only covers interior verdicts below its ceiling, and
+  // corrupted trajectories can also surface as ran-out black. If this
+  // BLA-assisted tile ends with a substantial black region, replay a few
+  // deterministically-spread black pixels PLAIN; any flip to escape proves
+  // the black untrustworthy, and every black pixel is recomputed plain —
+  // the honest price, paid only on proven corruption. True-interior tiles
+  // pay ~8 replays and move on.
+  if (orbit && bla !== null && !cancelled.has(id)) {
+    const black: number[] = [];
+    for (let i = 0; i < out.length; i++) if (out[i] === 0) black.push(i);
+    if (black.length >= CANARY_MIN_BLACK) {
+      const plainPixel = (idx: number, budgetP: number): number => {
+        const px = idx % phys;
+        const py = (idx / phys) | 0;
+        const cx = x0 + (px + 0.5) * pixStep;
+        const cy = y0 + (py + 0.5) * pixStep;
+        return deep
+          ? perturbPixelDeep(cx, cy, dcE, orbit!, budgetP, 0, 0, 0, dcE, 0)
+          : perturbPixel(cx, cy, orbit!, budgetP);
+      };
+      let flipped = false;
+      const stride = Math.max(1, Math.floor(black.length / CANARY_COUNT));
+      for (let k = 0; k < CANARY_COUNT && k * stride < black.length; k++) {
+        if (plainPixel(black[k * stride], budget) > 0) {
+          flipped = true;
+          break;
+        }
+      }
+      if (flipped) {
+        for (let i = 0; i < black.length; i++) {
+          const v = plainPixel(black[i], budget);
+          if (v > 0) {
+            out[black[i]] = v;
+            if (v > maxFinite) maxFinite = v;
+          }
+          if ((i & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
+            await tick();
+            if (cancelled.has(id)) {
+              cancelled.delete(id);
+              post({ type: "aborted", id, key });
+              return;
+            }
+          }
+        }
+      }
+    }
   }
 
   // Unresolved pixels against a budget-truncated (never-escaped) reference

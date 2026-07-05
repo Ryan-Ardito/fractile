@@ -240,6 +240,7 @@ export const perturbPixel = (
       if (n >= nextCheck) {
         if (e2Max < INTERIOR_E2) {
           lastLooseSkips.v = looseSkips;
+          pixelState.n = n; // fire point — callers may confirm by replay
           return looseSkips > LOOSE_SKIP_TOLERANCE ? BAD_REF : 0;
         }
         e2Max = 0;
@@ -308,7 +309,11 @@ export const perturbPixel = (
         dzy = axv * dzy + ayv * dzx + bxv * dcy + byv * dcx;
         dzx = nx;
         // The block's A is the accumulated derivative across it (to within
-        // the validity tolerance), so the interior test rides along free.
+        // the validity tolerance), so the interior test rides along free —
+        // including the block's INTERNAL peak, without which within-period
+        // e2 maxima hide inside skips and lingerers fire false interiors.
+        const pkv = e2 * lv.pk[j];
+        if (pkv > e2Max) e2Max = pkv;
         e2 *= axv * axv + ayv * ayv;
         if (e2 > E2_CLAMP) e2 = E2_CLAMP;
         if (e2 > e2Max) e2Max = e2;
@@ -358,6 +363,47 @@ export type UnresolvedBuf = {
   m: Int32Array;
   n: Int32Array;
   e2: Float64Array;
+};
+
+// Interior-confirmation state for a row pass. BLA-accumulated trajectory
+// error over long near-parabolic lingering can pull a truly-ESCAPING pixel
+// onto the attracting side, firing a false interior verdict at skips well
+// inside their validity radii (verified: plain escapes @66-72k where BLA
+// certifies interior — no radius margin catches accumulation-over-time). An
+// interior verdict fired at n <= CONFIRM_MAX_N is therefore confirmed by a
+// PLAIN replay (~ms); a flip to escape is used directly (that's the true
+// detail). Confirmation runs at full density until a streak of agreements,
+// then samples 1-in-64 — inside a contiguous false-interior halo every flip
+// resets the streak, so correction stays at full density exactly where it is
+// needed, while true-interior bodies pay only the sampled rate. Deep fires
+// (millions of iterations) skip confirmation: their display is black either
+// way, and replay there would cost seconds per pixel. Deterministic — cost
+// is a function of tile content only.
+export type ConfirmBuf = { streak: number };
+const CONFIRM_MAX_N = 1 << 18;
+const CONFIRM_STREAK = 8;
+const CONFIRM_SAMPLE_MASK = 63;
+
+export const confirmInterior = (
+  conf: ConfirmBuf,
+  idx: number,
+  fireN: number,
+  replay: (budget: number) => number,
+  maxIter: number
+): number => {
+  if (
+    fireN > CONFIRM_MAX_N ||
+    (conf.streak >= CONFIRM_STREAK && (idx & CONFIRM_SAMPLE_MASK) !== 0)
+  ) {
+    return 0;
+  }
+  const pv = replay(Math.min(maxIter, fireN * 2 + 1024));
+  if (pv === 0) {
+    conf.streak++;
+    return 0;
+  }
+  conf.streak = 0;
+  return pv; // escape (true detail), unresolved, or BAD_REF
 };
 
 // Bad-reference report for a row pass: how many pixels returned BAD_REF and
@@ -430,7 +476,8 @@ export const perturbRows = (
   out: Float32Array,
   un?: UnresolvedBuf,
   bla: BlaTable | null = null,
-  bad?: BadRefBuf
+  bad?: BadRefBuf,
+  conf?: ConfirmBuf
 ): number => {
   let ranOut = 0;
   for (let py = rowStart; py < rowEnd; py++) {
@@ -438,7 +485,14 @@ export const perturbRows = (
     const rowIdx = py * size;
     for (let px = 0; px < size; px++) {
       const dcx = dcx0 + (px + 0.5) * step;
-      const v = perturbPixel(dcx, dcy, orbit, maxIter, 0, 0, 0, 0, bla);
+      let v = perturbPixel(dcx, dcy, orbit, maxIter, 0, 0, 0, 0, bla);
+      if (v === 0 && bla !== null && conf) {
+        v = confirmInterior(
+          conf, rowIdx + px, pixelState.n,
+          (budget) => perturbPixel(dcx, dcy, orbit, budget),
+          maxIter
+        );
+      }
       if (v === BAD_REF) {
         if (bad) {
           if (bad.count === 0) {
@@ -528,6 +582,7 @@ export const perturbPixelDeep = (
       if (e2 > e2Max) e2Max = e2;
       if (n >= nextCheck) {
         if (e2Max < INTERIOR_E2) {
+          pixelState.n = n; // fire point — callers may confirm by replay
           return looseSkips > LOOSE_SKIP_TOLERANCE ? BAD_REF : 0;
         }
         e2Max = 0;
@@ -617,6 +672,8 @@ export const perturbPixelDeep = (
           wy = pym * f + qym;
           s = dcE;
         }
+        const pkv = e2 * lv.pk[j];
+        if (pkv > e2Max) e2Max = pkv;
         e2 *= axv * axv + ayv * ayv;
         if (e2 > E2_CLAMP) e2 = E2_CLAMP;
         if (e2 > e2Max) e2Max = e2;
@@ -700,7 +757,8 @@ export const perturbRowsDeep = (
   out: Float32Array,
   un?: UnresolvedBuf,
   bla: BlaTable | null = null,
-  bad?: BadRefBuf
+  bad?: BadRefBuf,
+  conf?: ConfirmBuf
 ): number => {
   let ranOut = 0;
   for (let py = rowStart; py < rowEnd; py++) {
@@ -708,7 +766,14 @@ export const perturbRowsDeep = (
     const rowIdx = py * size;
     for (let px = 0; px < size; px++) {
       const ux = u0x + (px + 0.5);
-      const v = perturbPixelDeep(ux, uy, dcE, orbit, maxIter, 0, 0, 0, dcE, 0, bla);
+      let v = perturbPixelDeep(ux, uy, dcE, orbit, maxIter, 0, 0, 0, dcE, 0, bla);
+      if (v === 0 && bla !== null && conf) {
+        v = confirmInterior(
+          conf, rowIdx + px, pixelState.n,
+          (budget) => perturbPixelDeep(ux, uy, dcE, orbit, budget, 0, 0, 0, dcE, 0),
+          maxIter
+        );
+      }
       if (v === BAD_REF) {
         if (bad) {
           if (bad.count === 0) {
