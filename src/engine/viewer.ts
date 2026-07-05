@@ -13,7 +13,7 @@ import {
 } from "./camera";
 import { FractalEngine } from "./pool";
 import { parseHash, serializeHash } from "./permalink";
-import { StyleVars, TileHandle, TileRenderer } from "./renderer";
+import { ExportTarget, StyleVars, TileHandle, TileRenderer } from "./renderer";
 import { fixedToFloat } from "./fixedPoint";
 
 const TILE_CACHE_MAX = 768;
@@ -59,6 +59,29 @@ const BASE_GRID_PRIORITY = -1;
 // missed). The budget caps both the compute and the cache footprint it pins.
 const PREWARM_PRIORITY = 1e13;
 const PREWARM_TILE_BUDGET = 384;
+
+// Video export: frames prefer tiles one level deeper than the output
+// resolution needs (2x supersampling via the level-selection bias in
+// visibleTiles) — but only where those tiles are already cached from
+// exploration. Computing the corridor happens at native level; the
+// supersample is a cache dividend, never a compute obligation (fresh
+// corridors would otherwise cost 4-8x the pixels). Export tiles rank just
+// above the parent-preload/prewarm background but below visible tiles —
+// the screen stays filled first (visible requests are few; the refinement
+// ladders that once starved exports are paused during a session).
+export const EXPORT_SUPERSAMPLE = 2;
+const EXPORT_PRIORITY = 2e6;
+// Export tile budget: exactly the screen's own first-pass curve, floors
+// and parent inheritance excluded. A zoom movie spends ~half a second per
+// level — the pace of a brisk dive, where the screen shows first-pass
+// quality and cancels refinement as the user moves on. Every attempt to
+// aim higher backfired measurably: learned floors and cached-parent
+// budgets are dominated by rare deep escapes the flash-by can't show, the
+// worker's first pass has no wall-clock guard (floor-sized budgets on
+// near-parabolic minibrot shells ran 13-18s per tile), and ladder rungs
+// past the first pass quadruple that. One bounded pass, accepted at its
+// first commit, ladder cancelled. The climax is unaffected: the current
+// view's tiles are cached from the screen at full refined quality.
 
 // First response for a tile whose best on-screen stand-in would be an
 // ancestor stretched 8x or worse (deep jumps, fast zooms): a quarter-cost
@@ -152,6 +175,21 @@ export class FractalViewer {
   private dpr = 1;
   private resizeObserver: ResizeObserver;
 
+  // Video export session state. Pinned tiles are exempt from eviction and
+  // kept in the engine's wanted set (so retain() never cancels their jobs);
+  // waiters resolve on any commit of their key so exportAcquire can poll
+  // for a final full-resolution tile.
+  private exportActive = false;
+  private exportPinned = new Set<string>();
+  private tileWaiters = new Map<string, Array<() => void>>();
+  private exportRef: { cxFP: bigint; cyFP: bigint; bits: number } | null = null;
+  // Per-level acquisition census for the current export session (also
+  // exposed as window.__fractileExportStats for console diagnosis).
+  private exportStats: Record<
+    number,
+    { n: number; hit: number; synth: number; waitMs: number; costMs: number }
+  > = {};
+
   constructor(container: HTMLElement, initialHash?: string) {
     this.container = container;
     this.canvas = document.createElement("canvas");
@@ -232,6 +270,7 @@ export class FractalViewer {
 
   destroy(): void {
     this.destroyed = true;
+    if (this.exportActive) this.exportEnd();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     this.engine.destroy();
@@ -285,6 +324,191 @@ export class FractalViewer {
     this.zoomAnchor = null;
     this.inertia = null;
     this.onCameraMove();
+  }
+
+  // --- video export session (see engine/export.ts for the pipeline) ---
+
+  // Snapshot the view and switch the cache into export mode: the prewarm
+  // corridor's protection is released in favor of the export window, and
+  // planPrewarm stays quiet until the session ends.
+  exportBegin(): {
+    zoom: number;
+    cxFP: bigint;
+    cyFP: bigint;
+    bits: number;
+    cssW: number;
+    cssH: number;
+  } {
+    this.exportActive = true;
+    this.exportRef = {
+      cxFP: this.camera.cxFP,
+      cyFP: this.camera.cyFP,
+      bits: this.camera.bits,
+    };
+    this.prewarmKeys.clear();
+    this.centerKeys.clear();
+    this.exportStats = {};
+    (globalThis as Record<string, unknown>).__fractileExportStats =
+      this.exportStats;
+    // Diagnostic (console): what an in-progress export is waiting on.
+    (globalThis as Record<string, unknown>).__fractileExportDebug = () => ({
+      pinned: this.exportPinned.size,
+      waiting: [...this.tileWaiters.keys()],
+      cacheSize: this.cache.size,
+      pendingTiles: [...this.pendingTiles.keys()],
+      engine: this.engine.debugState(),
+    });
+    return {
+      zoom: this.camera.zoom,
+      cxFP: this.camera.cxFP,
+      cyFP: this.camera.cyFP,
+      bits: this.camera.bits,
+      cssW: this.cssW,
+      cssH: this.cssH,
+    };
+  }
+
+  exportEnd(): void {
+    this.exportActive = false;
+    this.exportRef = null;
+    this.exportPinned.clear();
+    // Wake every waiter; exportAcquire re-checks exportActive and bails.
+    const waiters = [...this.tileWaiters.values()];
+    this.tileWaiters.clear();
+    for (const arr of waiters) for (const w of arr) w();
+    if (!this.destroyed) this.planPrewarm();
+    this.dirty = true;
+  }
+
+  // Pin a tile and resolve once a movie-quality version is cached: any
+  // finished job, or a provisional frame at the screen-parity budget (see
+  // the budget comment above EXPORT_PRIORITY). Meeting it mid-ladder
+  // accepts early and cancels the rest of the job. Synthesis from cached
+  // children is tried before computing, so acquiring deeper tiles before
+  // their parents makes shallower levels' central regions nearly free.
+  async exportAcquire(level: number, tx: bigint, ty: bigint): Promise<void> {
+    const key = this.tileKey(level, tx, ty);
+    this.exportPinned.add(key);
+    const target =
+      BASE_ITERATIONS * Math.max(1, Math.min(level, PERTURB_MIN_LEVEL));
+    const tAcq = performance.now();
+    let firstLook = true;
+    for (;;) {
+      if (!this.exportActive) throw new Error("export session ended");
+      let entry = this.cache.get(key);
+      if (!entry && this.trySynthesize(level, tx, ty, true)) {
+        entry = this.cache.get(key);
+      }
+      if (
+        entry &&
+        entry.tex.size >= TILE_SIZE &&
+        (!entry.needsMore || entry.maxIter >= target)
+      ) {
+        // Good enough for the movie — the view's own "no visual
+        // improvement above the measured bound" standard. If a job is
+        // still laddering toward the cap, free the worker; the entry
+        // stays needsMore so the interactive view can resume it later.
+        if (entry.needsMore) this.engine.cancelTile(key);
+        this.touch(key);
+        const st = (this.exportStats[level] ??= {
+          n: 0, hit: 0, synth: 0, waitMs: 0, costMs: 0,
+        });
+        st.n++;
+        if (firstLook) st.hit++;
+        if (entry.cost <= 0.1) st.synth++;
+        st.waitMs += performance.now() - tAcq;
+        st.costMs += entry.cost;
+        return;
+      }
+      firstLook = false;
+      const needsRef = level >= PERTURB_MIN_LEVEL;
+      if (needsRef && this.exportRef) {
+        // The export corridor shares the view's reference machinery; pixel
+        // size passed in exponent parts for this tile's level.
+        this.engine.ensureReference(
+          this.exportRef.cxFP,
+          this.exportRef.cyFP,
+          this.exportRef.bits,
+          this.baseIter(level),
+          1,
+          -(level + 4)
+        );
+      }
+      this.engine.requestTile({
+        key,
+        level,
+        tx,
+        ty,
+        size: TILE_SIZE,
+        maxIter: target,
+        needsRef,
+        priority: EXPORT_PRIORITY,
+      });
+      await new Promise<void>((resolve) => {
+        const arr = this.tileWaiters.get(key);
+        if (arr) arr.push(resolve);
+        else this.tileWaiters.set(key, [resolve]);
+      });
+    }
+  }
+
+  // Pin a tile only if it's already cached — used for the supersampled
+  // display level, which is drawn when exploration already paid for it but
+  // never computed for the export's sake.
+  exportPinIfCached(level: number, tx: bigint, ty: bigint): void {
+    const key = this.tileKey(level, tx, ty);
+    if (this.cache.has(key)) {
+      this.exportPinned.add(key);
+      this.touch(key);
+    }
+  }
+
+  // Drop pins deeper than maxLevel — the zoom-out export walks shallower,
+  // so deeper levels' pins are released once their synthesis role is done.
+  exportUnpinDeeper(maxLevel: number): void {
+    for (const key of this.exportPinned) {
+      if (levelOfKey(key) > maxLevel) this.exportPinned.delete(key);
+    }
+  }
+
+  exportCreateTarget(w: number, h: number): ExportTarget {
+    return this.renderer.createExportTarget(w, h);
+  }
+
+  exportDeleteTarget(target: ExportTarget): void {
+    this.renderer.deleteExportTarget(target);
+  }
+
+  // Compose one export frame from cache into the target and read it back
+  // top-down into out (RGBA). Tiles are addressed at the supersampled
+  // level and drawn from cache when exploration already computed them;
+  // everything else falls back one level to the native tiles the export
+  // materialized (screen quality). Returns false only when a tile had to
+  // fall back deeper than that — the caller re-acquires and retries.
+  // Fully synchronous: nothing may interleave between beginExport and
+  // readExport.
+  exportComposeFrame(
+    cam: DeepCamera,
+    target: ExportTarget,
+    out: Uint8Array
+  ): boolean {
+    const vis = cam.visibleTiles(target.w, target.h, EXPORT_SUPERSAMPLE);
+    this.renderer.beginExport(target);
+    let complete = true;
+    for (const t of vis.tiles) {
+      const entry = this.cache.get(this.tileKey(vis.level, t.tx, t.ty));
+      if (entry && entry.tex.size >= TILE_SIZE) {
+        this.renderer.drawTile(
+          entry.tex, t.x, t.y, vis.tilePx, vis.tilePx, 0, 0, 1, 1, 1
+        );
+        continue;
+      }
+      const pick = this.pickFallback(vis.level, t.tx, t.ty);
+      if (pick) this.drawFallbackPick(t.tx, t.ty, t.x, t.y, vis.tilePx, pick);
+      if (!pick || pick.d > 1) complete = false;
+    }
+    this.renderer.readExport(target, out);
+    return complete;
   }
 
   // --- internals ---
@@ -428,6 +652,9 @@ export class FractalViewer {
   // set, and the next moveend replans (which also cancels any
   // no-longer-relevant queued prewarm work via retain).
   private planPrewarm(): void {
+    // While exporting, spare worker time and cache belong to the export
+    // window; the corridor replans at the first moveend after the session.
+    if (this.exportActive) return;
     this.prewarmKeys.clear();
     this.centerKeys.clear();
     const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
@@ -501,14 +728,22 @@ export class FractalViewer {
   // GPU-subsampling them instead of computing it — microseconds instead of
   // a worker job. Synthesized tiles carry near-zero cost, so eviction sheds
   // them first; resynthesis is nearly free while the children live.
-  private trySynthesize(level: number, tx: bigint, ty: bigint): boolean {
+  // allowProvisional (export only): accept full-size children that are
+  // still refining; the result inherits needsMore so the view upgrades it.
+  private trySynthesize(
+    level: number,
+    tx: bigint,
+    ty: bigint,
+    allowProvisional = false
+  ): boolean {
     const kids: CacheEntry[] = [];
     for (let j = 0n; j <= 1n; j++) {
       for (let i = 0n; i <= 1n; i++) {
         const kid = this.cache.get(
           this.tileKey(level + 1, tx * 2n + i, ty * 2n + j)
         );
-        if (!kid || kid.needsMore) return false;
+        if (!kid || kid.tex.size < TILE_SIZE) return false;
+        if (kid.needsMore && !allowProvisional) return false;
         kids.push(kid);
       }
     }
@@ -528,7 +763,7 @@ export class FractalViewer {
       loadedAt: performance.now(),
       maxIter: Math.min(...kids.map((k) => k.maxIter)),
       maxFinite: Math.max(...kids.map((k) => k.maxFinite)),
-      needsMore: false,
+      needsMore: kids.some((k) => k.needsMore),
       level,
       cost: 0.1,
     });
@@ -558,6 +793,14 @@ export class FractalViewer {
     cost: number,
     final: boolean
   ): void {
+    // Export tiles commit immediately: their progress must not depend on
+    // the rAF drain, which is capped per frame and paused in background
+    // tabs entirely.
+    if (this.exportActive && this.exportPinned.has(key)) {
+      this.pendingTiles.delete(key);
+      this.commitTile(key, data, iterDone, maxFinite, cost, final);
+      return;
+    }
     this.pendingTiles.set(key, { data, iterDone, maxFinite, cost, final });
     this.dirty = true;
   }
@@ -602,6 +845,12 @@ export class FractalViewer {
       this.iterFloor.set(level, need);
     }
 
+    const waiters = this.tileWaiters.get(key);
+    if (waiters) {
+      this.tileWaiters.delete(key);
+      for (const w of waiters) w();
+    }
+
     this.evictOverflow();
     this.dirty = true;
   }
@@ -615,10 +864,22 @@ export class FractalViewer {
       //  2. Relevant BREADTH (window prewarm, parents) — the central column
       //     and the visible level are spared until nothing else remains.
       //  3. LRU among non-base tiles, then absolute LRU.
+      // During an export, pinned tiles AND everything the screen currently
+      // wants are untouchable in every tier — evicting a visible tile
+      // would blank part of the screen and burn a worker recomputing it.
+      const untouchable = (k: string): boolean =>
+        this.exportPinned.has(k) ||
+        (this.exportActive && this.lastWanted.has(k));
       let evictKey: string | undefined;
       let evictCost = Infinity;
       for (const [k, e] of this.cache) {
-        if (e.level <= BASE_PROTECT_LEVEL || this.lastWanted.has(k)) continue;
+        if (
+          e.level <= BASE_PROTECT_LEVEL ||
+          this.lastWanted.has(k) ||
+          this.exportPinned.has(k)
+        ) {
+          continue;
+        }
         if (e.cost < evictCost) {
           evictKey = k;
           evictCost = e.cost;
@@ -629,7 +890,8 @@ export class FractalViewer {
           if (
             e.level <= BASE_PROTECT_LEVEL ||
             e.level === this.lastLevel ||
-            this.centerKeys.has(k)
+            this.centerKeys.has(k) ||
+            untouchable(k)
           ) {
             continue;
           }
@@ -641,15 +903,24 @@ export class FractalViewer {
       }
       if (evictKey === undefined) {
         for (const [k, e] of this.cache) {
-          if (e.level > BASE_PROTECT_LEVEL) {
+          if (e.level > BASE_PROTECT_LEVEL && !untouchable(k)) {
             evictKey = k;
             break;
           }
         }
       }
       if (evictKey === undefined) {
-        evictKey = this.cache.keys().next().value as string;
+        for (const k of this.cache.keys()) {
+          if (!untouchable(k)) {
+            evictKey = k;
+            break;
+          }
+        }
       }
+      // Everything left is protected by an export in progress: let the
+      // cache overshoot its cap for the session rather than tear frames
+      // or the screen apart.
+      if (evictKey === undefined) break;
       const evicted = this.cache.get(evictKey);
       if (evicted) {
         this.renderer.deleteTile(evicted.tex);
@@ -777,8 +1048,10 @@ export class FractalViewer {
         if (alpha < 1) fading = true;
         // A provisional frame whose escalation was cancelled off-screen:
         // finish it now that it's visible again (no-op while still running —
-        // in-flight keys are deduplicated).
-        if (entry.needsMore && !this.pendingTiles.has(key)) {
+        // in-flight keys are deduplicated). Paused during export: these
+        // ladders can hold a worker for many seconds each, and the export
+        // owns the pool for the session.
+        if (entry.needsMore && !this.exportActive && !this.pendingTiles.has(key)) {
           this.engine.requestTile({
             key,
             level: vis.level,
@@ -880,8 +1153,10 @@ export class FractalViewer {
     }
 
     // Keep the planned zoom-out corridor alive across renders: retain() must
-    // not cancel its queued jobs, and eviction must not eat its tiles.
+    // not cancel its queued jobs, and eviction must not eat its tiles. Same
+    // for an in-progress export's window.
     for (const key of this.prewarmKeys) wanted.add(key);
+    for (const key of this.exportPinned) wanted.add(key);
 
     this.engine.retain(wanted);
     this.lastWanted = wanted;

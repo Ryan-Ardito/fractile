@@ -84,6 +84,25 @@ export class FractalEngine {
     this.parked.clear();
   }
 
+  // Diagnostic snapshot (console debugging; see viewer's export debug hook).
+  debugState(): {
+    queued: string[];
+    parked: string[];
+    inFlight: string[];
+    busyWorkers: number;
+    refStatus: string | null;
+  } {
+    return {
+      queued: [...this.queue.keys()],
+      parked: [...this.parked.keys()],
+      inFlight: [...this.inFlight.values()]
+        .filter((m) => !m.isRef)
+        .map((m) => m.key),
+      busyWorkers: this.workers.filter((w) => w.taskId !== null).length,
+      refStatus: this.ref ? `${this.ref.refId}:${this.ref.status}` : null,
+    };
+  }
+
   // Returns true if a suitable reference is ready. Otherwise starts (or keeps
   // waiting on) a computation and returns false; deep tile requests park in
   // the meantime and are released when the orbit arrives.
@@ -136,6 +155,7 @@ export class FractalEngine {
     const queued = this.queue.get(job.key) ?? this.parked.get(job.key);
     if (queued) {
       queued.priority = job.priority;
+      queued.maxIter = Math.max(queued.maxIter, job.maxIter);
       return;
     }
     if (job.needsRef && this.ref?.status !== "ready") {
@@ -154,6 +174,18 @@ export class FractalEngine {
       this.parked.set(job.key, job);
     } else {
       this.queue.set(job.key, job);
+    }
+  }
+
+  // Cancel one tile's work wherever it is (export accepts a provisional
+  // frame and releases the worker; the tile stays resumable for the view).
+  cancelTile(key: string): void {
+    this.queue.delete(key);
+    this.parked.delete(key);
+    const id = this.inFlightByKey.get(key);
+    if (id !== undefined) {
+      const meta = this.inFlight.get(id);
+      if (meta) this.workers[meta.workerIdx].w.postMessage({ type: "cancel", id });
     }
   }
 

@@ -1,8 +1,19 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimateDirection, useAppContext } from "../AppContext";
+import {
+  ExportCancelledError,
+  ExportOptions,
+  ExportProgress,
+  VideoExporter,
+} from "../engine/export";
+
+type ExportUiState =
+  | { kind: "idle" }
+  | { kind: "running"; progress: ExportProgress }
+  | { kind: "error"; message: string };
 
 export const Menu = () => {
-  const { controlValues, updateControlValues } = useAppContext();
+  const { viewer, controlValues, updateControlValues } = useAppContext();
   const menuCollapsed = controlValues.menuCollapsed;
 
   const visibility = menuCollapsed ? "collapse" : "visible";
@@ -15,6 +26,105 @@ export const Menu = () => {
   };
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const [exportState, setExportState] = useState<ExportUiState>({
+    kind: "idle",
+  });
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const exporterRef = useRef<VideoExporter | null>(null);
+  const errorTimer = useRef<number | undefined>(undefined);
+  const confirmTimer = useRef<number | undefined>(undefined);
+
+  const clearConfirmCancel = () => {
+    clearTimeout(confirmTimer.current);
+    setConfirmCancel(false);
+  };
+
+  const onExportClick = () => {
+    // While running, the first click arms a confirmation; a second click
+    // within the window actually cancels.
+    if (exporterRef.current) {
+      if (!confirmCancel) {
+        setConfirmCancel(true);
+        clearTimeout(confirmTimer.current);
+        confirmTimer.current = window.setTimeout(
+          () => setConfirmCancel(false),
+          4000
+        );
+        return;
+      }
+      clearConfirmCancel();
+      exporterRef.current.cancel();
+      return;
+    }
+    const v = viewer.current;
+    if (!v) return;
+    if (controlValues.isAnimating) {
+      updateControlValues({ type: "TOGGLE_ANIMATING" });
+    }
+    const exporter = new VideoExporter(v);
+    exporterRef.current = exporter;
+    setExportState({
+      kind: "running",
+      progress: { phase: "render", fraction: 0 },
+    });
+    exporter.run((progress) => setExportState({ kind: "running", progress }))
+      .then(
+        () => {
+          exporterRef.current = null;
+          clearConfirmCancel();
+          setExportState({ kind: "idle" });
+        },
+        (e) => {
+          exporterRef.current = null;
+          clearConfirmCancel();
+          if (e instanceof ExportCancelledError) {
+            setExportState({ kind: "idle" });
+            return;
+          }
+          console.error("video export failed", e);
+          setExportState({
+            kind: "error",
+            message: e instanceof Error ? e.message : String(e),
+          });
+          clearTimeout(errorTimer.current);
+          errorTimer.current = window.setTimeout(
+            () => setExportState({ kind: "idle" }),
+            5000
+          );
+        }
+      );
+  };
+
+  // Headless-test hook (same spirit as window.__fractileSynth): run an
+  // export with overridden pacing, reporting progress on the window.
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__fractileExportTest = (
+      opts?: ExportOptions
+    ) => {
+      const v = viewer.current;
+      if (!v) return Promise.reject(new Error("viewer not ready"));
+      const w = window as unknown as Record<string, unknown>;
+      return new VideoExporter(v, opts).run((p) => {
+        w.__fractileExportProgress = p;
+      });
+    };
+  }, []);
+
+  const exportLabel =
+    exportState.kind === "running"
+      ? confirmCancel
+        ? "click again to cancel"
+        : exportState.progress.phase === "save"
+          ? "saving…"
+          : `exporting ${Math.floor(exportState.progress.fraction * 100)}%`
+      : exportState.kind === "error"
+        ? exportState.message
+        : "export zoom video";
+  const exportFill =
+    exportState.kind === "running"
+      ? Math.floor(exportState.progress.fraction * 100)
+      : 0;
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === "ArrowUp") {
@@ -41,6 +151,31 @@ export const Menu = () => {
         >
           {animateButtonText}
         </button>
+        {VideoExporter.isSupported() && (
+          <button
+            id="exportButton"
+            onClick={onExportClick}
+            title={
+              exportState.kind === "running"
+                ? confirmCancel
+                  ? "click again to cancel the export"
+                  : "click to cancel"
+                : "export a zoom movie ending at this view"
+            }
+            style={
+              exportState.kind === "running"
+                ? {
+                    background: `linear-gradient(to right, ${
+                      confirmCancel ? "#7a3d3d" : "#3d6b4f"
+                    } ${exportFill}%, #303030 ${exportFill}%)`,
+                    cursor: "pointer",
+                  }
+                : undefined
+            }
+          >
+            {exportLabel}
+          </button>
+        )}
         <div>
           <label>
             animation speed: {controlValues.animationSpeed} bpm

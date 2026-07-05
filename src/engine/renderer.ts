@@ -28,16 +28,28 @@ export type TileHandle = {
   size: number;
 };
 
+// Offscreen RGBA8 render target for video export frames.
+export type ExportTarget = {
+  fbo: WebGLFramebuffer;
+  tex: WebGLTexture;
+  w: number;
+  h: number;
+};
+
 const QUAD_VERT = `#version 300 es
 in vec2 aPos;
 uniform vec4 uRect;     // x, y, w, h in device pixels, origin top-left
 uniform vec2 uViewport; // device pixels
+// -1 for the screen (and FBO passes tuned to that convention); +1 when
+// compositing an export frame into an FBO so readPixels' bottom-up row
+// order comes back as a top-down image.
+uniform float uYSign;
 out vec2 vUV;
 void main() {
   vUV = aPos;
   vec2 px = uRect.xy + aPos * uRect.zw;
   vec2 clip = (px / uViewport) * 2.0 - 1.0;
-  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+  gl_Position = vec4(clip.x, uYSign * clip.y, 0.0, 1.0);
 }`;
 
 const PALETTE_FRAG = `#version 300 es
@@ -226,6 +238,10 @@ export class TileRenderer {
   private styleVersion = 0;
   private viewportW = 0;
   private viewportH = 0;
+  // The composite pass's current destination (null = the canvas). Side
+  // passes (palette colorize, synthesis) borrow the shared FBO mid-pass and
+  // must restore this binding, not assume the canvas.
+  private boundTarget: ExportTarget | null = null;
   // Rendering INTO an R32F texture needs this extension; without it tile
   // synthesis is silently unavailable and callers fall back to computing.
   private canSynthesize: boolean;
@@ -243,7 +259,7 @@ export class TileRenderer {
     this.paletteProg = link(gl, PALETTE_FRAG);
     this.compositeProg = link(gl, COMPOSITE_FRAG);
     this.subsampleProg = link(gl, SUBSAMPLE_FRAG);
-    for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData"]) {
+    for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData", "uYSign"]) {
       this.paletteUni.set(name, gl.getUniformLocation(this.paletteProg, name));
     }
     for (const name of [
@@ -254,12 +270,19 @@ export class TileRenderer {
       "uColor",
       "uCubicMix",
       "uTexSize",
+      "uYSign",
     ]) {
       this.compUni.set(name, gl.getUniformLocation(this.compositeProg, name));
     }
-    for (const name of ["uRect", "uViewport", "uData", "uQuadOrigin"]) {
+    for (const name of ["uRect", "uViewport", "uData", "uQuadOrigin", "uYSign"]) {
       this.subUni.set(name, gl.getUniformLocation(this.subsampleProg, name));
     }
+    // Palette and subsample passes always use the screen convention; only
+    // the composite pass toggles (see begin/beginExport).
+    gl.useProgram(this.paletteProg);
+    gl.uniform1f(this.paletteUni.get("uYSign") ?? null, -1);
+    gl.useProgram(this.subsampleProg);
+    gl.uniform1f(this.subUni.get("uYSign") ?? null, -1);
     this.canSynthesize = !!gl.getExtension("EXT_color_buffer_float");
 
     const vao = gl.createVertexArray();
@@ -349,17 +372,23 @@ export class TileRenderer {
     }
 
     // Restore composite state.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.restoreCompositeTarget();
+    return { dataTex, colorTex: null, colorVersion: -1, size };
+  }
+
+  private restoreCompositeTarget(): void {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.boundTarget?.fbo ?? null);
     gl.viewport(0, 0, this.viewportW, this.viewportH);
     gl.enable(gl.BLEND);
     gl.useProgram(this.compositeProg);
-    return { dataTex, colorTex: null, colorVersion: -1, size };
   }
 
   begin(wDev: number, hDev: number): void {
     const gl = this.gl;
     this.viewportW = wDev;
     this.viewportH = hDev;
+    this.boundTarget = null;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, wDev, hDev);
     gl.disable(gl.BLEND);
@@ -368,6 +397,59 @@ export class TileRenderer {
     gl.useProgram(this.compositeProg);
     gl.uniform2f(this.compUni.get("uViewport") ?? null, wDev, hDev);
     gl.uniform1i(this.compUni.get("uColor") ?? null, 0);
+    gl.uniform1f(this.compUni.get("uYSign") ?? null, -1);
+  }
+
+  createExportTarget(w: number, h: number): ExportTarget {
+    const gl = this.gl;
+    const tex = gl.createTexture();
+    if (!tex) throw new Error("texture allocation failed");
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fbo = gl.createFramebuffer();
+    if (!fbo) throw new Error("framebuffer allocation failed");
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { fbo, tex, w, h };
+  }
+
+  deleteExportTarget(target: ExportTarget): void {
+    this.gl.deleteFramebuffer(target.fbo);
+    this.gl.deleteTexture(target.tex);
+    if (this.boundTarget === target) this.boundTarget = null;
+  }
+
+  // Like begin(), but compositing into the export target with flipped Y so
+  // the readback below is top-down. Must be paired with readExport in the
+  // same task: side passes triggered by drawTile restore state correctly,
+  // but the interactive begin() may retake the context between tasks.
+  beginExport(target: ExportTarget): void {
+    const gl = this.gl;
+    this.viewportW = target.w;
+    this.viewportH = target.h;
+    this.boundTarget = target;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, target.w, target.h);
+    gl.disable(gl.BLEND);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.useProgram(this.compositeProg);
+    gl.uniform2f(this.compUni.get("uViewport") ?? null, target.w, target.h);
+    gl.uniform1i(this.compUni.get("uColor") ?? null, 0);
+    gl.uniform1f(this.compUni.get("uYSign") ?? null, 1);
+  }
+
+  readExport(target: ExportTarget, out: Uint8Array): void {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.readPixels(0, 0, target.w, target.h, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.boundTarget = null;
   }
 
   // Re-colorize a tile's RGBA texture from its escape-time data (runs only
@@ -416,10 +498,7 @@ export class TileRenderer {
     handle.colorVersion = this.styleVersion;
 
     // Restore composite state.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.viewportW, this.viewportH);
-    gl.enable(gl.BLEND);
-    gl.useProgram(this.compositeProg);
+    this.restoreCompositeTarget();
   }
 
   drawTile(
