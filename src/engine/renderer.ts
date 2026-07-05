@@ -25,6 +25,11 @@ export type TileHandle = {
   dataTex: WebGLTexture;
   colorTex: WebGLTexture | null;
   colorVersion: number;
+  // Separate colorization for the export style slot (see setExportStyle):
+  // export frames must not read — or invalidate — the live view's cached
+  // colors, and vice versa. Freed when the export session ends.
+  exportColorTex: WebGLTexture | null;
+  exportColorVersion: number;
   // Physical texture size; the logical tile is the inner square inset by
   // apron texels of true neighbor data on every side (see TILE_APRON).
   size: number;
@@ -245,6 +250,13 @@ export class TileRenderer {
   private fbo: WebGLFramebuffer;
   private style: StyleVars | null = null;
   private styleVersion = 0;
+  // Export style slot: a snapshot of the live style taken at export begin,
+  // with the exporter's per-frame overrides (animated color offsets) applied
+  // on top. Export-target compositing colorizes through this slot so the
+  // movie is deterministic in video time — decoupled from whatever the live
+  // style is doing while segments render.
+  private exportStyle: StyleVars | null = null;
+  private exportStyleVersion = 0;
   private viewportW = 0;
   private viewportH = 0;
   // The composite pass's current destination (null = the canvas). Side
@@ -328,6 +340,32 @@ export class TileRenderer {
     this.styleVersion++;
   }
 
+  // Open the export style slot as a snapshot of the current live style.
+  beginExportStyle(): void {
+    this.exportStyle = { ...(this.style as StyleVars) };
+    this.exportStyleVersion++;
+  }
+
+  setExportStyle(vars: Partial<StyleVars>): void {
+    if (!this.exportStyle) this.exportStyle = { ...(this.style as StyleVars) };
+    this.exportStyle = { ...this.exportStyle, ...vars };
+    this.exportStyleVersion++;
+  }
+
+  endExportStyle(): void {
+    this.exportStyle = null;
+  }
+
+  // Free a tile's export-slot colorization (the session is over; the live
+  // slot is untouched).
+  dropExportColor(handle: TileHandle): void {
+    if (handle.exportColorTex) {
+      this.gl.deleteTexture(handle.exportColorTex);
+      handle.exportColorTex = null;
+      handle.exportColorVersion = -1;
+    }
+  }
+
   uploadTile(data: Float32Array, size: number, apron = 0): TileHandle {
     const gl = this.gl;
     const dataTex = gl.createTexture();
@@ -338,12 +376,21 @@ export class TileRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, data);
-    return { dataTex, colorTex: null, colorVersion: -1, size, apron };
+    return {
+      dataTex,
+      colorTex: null,
+      colorVersion: -1,
+      exportColorTex: null,
+      exportColorVersion: -1,
+      size,
+      apron,
+    };
   }
 
   deleteTile(handle: TileHandle): void {
     this.gl.deleteTexture(handle.dataTex);
     if (handle.colorTex) this.gl.deleteTexture(handle.colorTex);
+    if (handle.exportColorTex) this.gl.deleteTexture(handle.exportColorTex);
   }
 
   // Build a parent tile's data texture by 2:1 subsampling its four cached
@@ -397,7 +444,15 @@ export class TileRenderer {
 
     // Restore composite state.
     this.restoreCompositeTarget();
-    return { dataTex, colorTex: null, colorVersion: -1, size, apron };
+    return {
+      dataTex,
+      colorTex: null,
+      colorVersion: -1,
+      exportColorTex: null,
+      exportColorVersion: -1,
+      size,
+      apron,
+    };
   }
 
   private restoreCompositeTarget(): void {
@@ -477,13 +532,24 @@ export class TileRenderer {
   }
 
   // Re-colorize a tile's RGBA texture from its escape-time data (runs only
-  // when the tile is drawn with a stale style version).
-  private ensureColor(handle: TileHandle): void {
-    if (handle.colorTex && handle.colorVersion === this.styleVersion) return;
+  // when the tile is drawn with a stale style version). While compositing
+  // into an export target the export style slot is used — its own texture
+  // and version, so live and export colorizations never invalidate each
+  // other. Under an animated export the version changes every frame, so the
+  // export slot degenerates to colorize-per-draw, which is the honest cost
+  // of animated palettes. Returns the texture to composite from.
+  private ensureColor(handle: TileHandle): WebGLTexture {
+    const exporting = this.boundTarget !== null && this.exportStyle !== null;
+    const version = exporting ? this.exportStyleVersion : this.styleVersion;
+    let tex = exporting ? handle.exportColorTex : handle.colorTex;
+    const texVersion = exporting
+      ? handle.exportColorVersion
+      : handle.colorVersion;
+    if (tex && texVersion === version) return tex;
     const gl = this.gl;
     const size = handle.size;
-    if (!handle.colorTex) {
-      const tex = gl.createTexture();
+    if (!tex) {
+      tex = gl.createTexture();
       if (!tex) throw new Error("texture allocation failed");
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -493,17 +559,18 @@ export class TileRenderer {
       gl.texImage2D(
         gl.TEXTURE_2D, 0, gl.RGBA8, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null
       );
-      handle.colorTex = tex;
+      if (exporting) handle.exportColorTex = tex;
+      else handle.colorTex = tex;
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.framebufferTexture2D(
-      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, handle.colorTex, 0
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0
     );
     gl.viewport(0, 0, size, size);
     gl.disable(gl.BLEND);
     gl.useProgram(this.paletteProg);
-    const style = this.style;
+    const style = exporting ? this.exportStyle : this.style;
     if (style) {
       gl.uniform1f(this.paletteUni.get("uIterFalloff") ?? null, style.iterFalloff);
       gl.uniform1f(this.paletteUni.get("uPaletteScale") ?? null, style.paletteScale);
@@ -519,10 +586,12 @@ export class TileRenderer {
     gl.uniform2f(this.paletteUni.get("uViewport") ?? null, size, size);
     gl.bindTexture(gl.TEXTURE_2D, handle.dataTex);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    handle.colorVersion = this.styleVersion;
+    if (exporting) handle.exportColorVersion = version;
+    else handle.colorVersion = version;
 
     // Restore composite state.
     this.restoreCompositeTarget();
+    return tex;
   }
 
   drawTile(
@@ -538,8 +607,7 @@ export class TileRenderer {
     alpha: number
   ): void {
     const gl = this.gl;
-    this.ensureColor(handle);
-    gl.bindTexture(gl.TEXTURE_2D, handle.colorTex);
+    gl.bindTexture(gl.TEXTURE_2D, this.ensureColor(handle));
     // Callers address the LOGICAL tile in [0,1]; inset through the apron so
     // sampling kernels read real neighbor data across logical edges.
     const phys = handle.size;

@@ -348,6 +348,10 @@ export class FractalViewer {
     cssH: number;
   } {
     this.exportActive = true;
+    // Freeze the movie's colors: export frames colorize through a snapshot
+    // of the current style (plus the exporter's per-frame animated offsets),
+    // so live style changes during the render can't leak into the video.
+    this.renderer.beginExportStyle();
     this.exportRef = {
       cxFP: this.camera.cxFP,
       cyFP: this.camera.cyFP,
@@ -376,10 +380,25 @@ export class FractalViewer {
     };
   }
 
+  // Override style variables for subsequent export frames (animated color
+  // offsets, evaluated by the exporter in video time). Touches only the
+  // export style slot — the live view is unaffected.
+  exportSetStyle(vars: Partial<StyleVars>): void {
+    this.renderer.setExportStyle(vars);
+  }
+
   exportEnd(): void {
     this.exportActive = false;
     this.exportRef = null;
     this.exportPinned.clear();
+    // Close the export style slot and free its per-tile colorizations.
+    // (exportEnd can run twice — cancel() and the pipeline's finally — so
+    // everything here is idempotent.)
+    this.renderer.endExportStyle();
+    for (const entry of this.cache.values()) {
+      this.renderer.dropExportColor(entry.tex);
+      if (entry.prevTex) this.renderer.dropExportColor(entry.prevTex);
+    }
     // Wake every waiter; exportAcquire re-checks exportActive and bails.
     const waiters = [...this.tileWaiters.values()];
     this.tileWaiters.clear();

@@ -61,9 +61,34 @@ type ChunkRecord = {
   data: Uint8Array;
 };
 
+// Color-animation state captured at export time. The movie evaluates the
+// same stepping math the live loop uses, but in VIDEO time — frame i sits at
+// i/fps seconds — never wall-clock time. The live path accumulates a linear
+// step per rAF (offset += rate * elapsed), so the closed form below
+// reproduces it exactly while staying deterministic under the export's
+// out-of-order segment production.
+export type ColorAnimation = {
+  bandOffset: number; // starting offsets (frame 0 = whole-set opening shot)
+  hueOffset: number;
+  bandDirection: number; // +1 | -1
+  hueDirection: number;
+  bandHueSpeed: number; // 0..1 band-vs-hue rate mix, as in the live control
+  frameDuration: number; // ms per animation frame unit (60000 / speed)
+};
+
 export type ExportOptions = {
   fps?: number;
   levelsPerSec?: number;
+  // When present, the movie's bandOffset/hueOffset animate along the video
+  // timeline; when absent, frames use the style snapshot taken at exportBegin.
+  colorAnimation?: ColorAnimation;
+};
+
+// Wrap into [-half, half), mirroring the live loop's numeric hygiene; the
+// palette math is periodic so the wrap never changes the rendered color.
+const wrapCentered = (v: number, half: number): number => {
+  const period = 2 * half;
+  return ((((v + half) % period) + period) % period) - half;
 };
 
 const serializeChunks = (chunks: ChunkRecord[]): Uint8Array<ArrayBuffer> => {
@@ -185,10 +210,12 @@ export class VideoExporter {
   private running = false;
   private fps: number;
   private levelsPerSec: number;
+  private colorAnimation: ColorAnimation | null;
 
   constructor(private viewer: FractalViewer, opts: ExportOptions = {}) {
     this.fps = opts.fps ?? FPS;
     this.levelsPerSec = opts.levelsPerSec ?? LEVELS_PER_SEC;
+    this.colorAnimation = opts.colorAnimation ?? null;
   }
 
   static isSupported(): boolean {
@@ -266,6 +293,28 @@ export class VideoExporter {
         cam.setZoom(zoomOf(i));
         cam.setCenterFP(snap.cxFP, snap.cyFP, snap.bits);
         return cam;
+      };
+      // Animated color offsets for frame i, at i/fps seconds of VIDEO time —
+      // the closed form of the live loop's accumulated per-rAF step. Pure in
+      // the frame index: segments render deep-first and re-compose on
+      // eviction races, so any dependence on production order or wall clock
+      // would tear the animation.
+      const anim = this.colorAnimation;
+      const styleAt = (i: number): { bandOffset: number; hueOffset: number } => {
+        const a = anim!;
+        const framesPassed = (i * 1000) / fps / a.frameDuration;
+        const bandSpeed = Math.min(1, (1 - a.bandHueSpeed) * 2);
+        const hueSpeed = Math.min(1, a.bandHueSpeed * 2);
+        return {
+          bandOffset: wrapCentered(
+            a.bandOffset + Math.PI * bandSpeed * a.bandDirection * framesPassed,
+            Math.PI
+          ),
+          hueOffset: wrapCentered(
+            a.hueOffset + 90 * hueSpeed * a.hueDirection * framesPassed,
+            180
+          ),
+        };
       };
 
       const bitrate = Math.min(30e6, Math.round(outW * outH * fps * 0.1));
@@ -496,6 +545,7 @@ export class VideoExporter {
           this.checkAborted();
           if (encodeError) throw encodeError;
           const cam = camAt(i);
+          if (anim) this.viewer.exportSetStyle(styleAt(i));
           if (!this.viewer.exportComposeFrame(cam, target, pixels)) {
             // A tile slipped between materialize and compose (eviction
             // race); re-acquire this frame's native needs and take the

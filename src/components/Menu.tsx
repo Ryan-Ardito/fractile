@@ -13,7 +13,8 @@ type ExportUiState =
   | { kind: "error"; message: string };
 
 export const Menu = () => {
-  const { viewer, controlValues, updateControlValues } = useAppContext();
+  const { viewer, animationValues, controlValues, updateControlValues } =
+    useAppContext();
   const menuCollapsed = controlValues.menuCollapsed;
 
   const visibility = menuCollapsed ? "collapse" : "visible";
@@ -59,10 +60,24 @@ export const Menu = () => {
     }
     const v = viewer.current;
     if (!v) return;
+    // If colors are animating, the movie animates them too — capture the
+    // state BEFORE stopping the live animation (the exporter re-runs the
+    // stepping math in video time; see ColorAnimation in export.ts).
+    const anim = animationValues.current;
+    const colorAnimation = anim.isAnimating
+      ? {
+          bandOffset: anim.bandOffset,
+          hueOffset: anim.hueOffset,
+          bandDirection: anim.bandDirection,
+          hueDirection: anim.hueDirection,
+          bandHueSpeed: anim.bandHueSpeed,
+          frameDuration: anim.frameDuration,
+        }
+      : undefined;
     if (controlValues.isAnimating) {
       updateControlValues({ type: "TOGGLE_ANIMATING" });
     }
-    const exporter = new VideoExporter(v);
+    const exporter = new VideoExporter(v, { colorAnimation });
     exporterRef.current = exporter;
     setExportState({
       kind: "running",
