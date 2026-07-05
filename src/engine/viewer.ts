@@ -5,6 +5,8 @@
 import {
   BASE_ITERATIONS,
   DeepCamera,
+  ITER_ABS_CAP,
+  ITER_ESCALATION,
   ITER_HARD_CAP,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -61,6 +63,28 @@ const BASE_GRID_PRIORITY = -1;
 const PREWARM_PRIORITY = 1e13;
 const PREWARM_TILE_BUDGET = 384;
 
+// Idle refinement: the escalation ladder's wall-clock guard stops tiles
+// honestly with unresolved (black) pixels below the iteration cap — but a
+// parked view with idle workers should keep chasing the ideal ("every tile
+// at infinite iterations") instead of freezing there. When the engine
+// drains, visible tiles that still hold sub-cap unresolved pixels are
+// re-requested at the next escalation rung, at a priority below everything
+// else; any camera movement cancels the in-flight passes immediately (their
+// row/chunk loops poll cancellation), so the pool is never busy when
+// interaction needs it.
+const IDLE_REFINE_PRIORITY = 1e14;
+const IDLE_REFINE_REPLAN_MS = 1500;
+
+// Interactive iteration cap. The debug override (__fractileCapBase) exists
+// to test the cap-escalation machinery at scaled-down constants — a view
+// where the REAL 2^22 cap binds needs extreme depth.
+const capBase = (): number =>
+  (globalThis as { __fractileCapBase?: number }).__fractileCapBase ??
+  ITER_HARD_CAP;
+// Ceiling idle refinement may reach: 16x the interactive cap (= ITER_ABS_CAP
+// at production constants).
+const refineCeil = (): number => Math.min(ITER_ABS_CAP, capBase() * 16);
+
 // Video export: frames prefer tiles one level deeper than the output
 // resolution needs (2x supersampling via the level-selection bias in
 // visibleTiles) — but only where those tiles are already cached from
@@ -109,6 +133,13 @@ type CacheEntry = {
   // Worker-measured compute cost (ms). Eviction sacrifices cheap tiles first,
   // so an expensive deep corridor survives a trip to shallow water and back.
   cost: number;
+  // Pixels still unresolved (neither escaped nor interior-certified) at
+  // maxIter — the idle-refinement candidates. Synthesized tiles inherit the
+  // worst of their children.
+  ranOut: number;
+  // Built by GPU subsampling of children rather than computed (refGen 0 is
+  // NOT a synth marker: direct-path tiles carry it too).
+  synth: boolean;
   // Reference GENERATION the tile was computed under (0 = direct path or
   // synthesized). Chaos-class content visibly disagrees across generations
   // (correlated rounding drift becomes broad brightness shifts after the
@@ -170,8 +201,13 @@ export class FractalViewer {
       cost: number;
       final: boolean;
       refGen: number;
+      ranOut: number;
     }
   >();
+  private lastRefinePlanAt = 0;
+  // Keys issued by the idle planner (refinement + children) — kept in the
+  // wanted set so retain() doesn't cancel them at the next repaint.
+  private idleKeys = new Set<string>();
   private canvasRect: DOMRect | null = null;
   private pinch: { dist: number; zoom: number } | null = null;
   private lastTap: { x: number; y: number; t: number } | null = null;
@@ -235,8 +271,8 @@ export class FractalViewer {
     this.lastMoveAt = performance.now();
 
     this.engine = new FractalEngine(
-      (key, data, iterDone, maxFinite, cost, final, refGen) =>
-        this.onTile(key, data, iterDone, maxFinite, cost, final, refGen)
+      (key, data, iterDone, maxFinite, cost, final, refGen, ranOut) =>
+        this.onTile(key, data, iterDone, maxFinite, cost, final, refGen, ranOut)
     );
 
     const baseTiles = 1n << BigInt(BASE_GRID_LEVEL);
@@ -547,6 +583,12 @@ export class FractalViewer {
     this.moved = true;
     this.lastMoveAt = performance.now();
     this.dirty = true;
+    // Interaction reclaims the pool instantly: idle-refinement passes can
+    // legally run long (they are only ever scheduled into dead time), so
+    // they must die the moment the camera moves — and their queued keys
+    // stop being retained so the next repaint's retain() drops them.
+    this.idleKeys.clear();
+    this.engine.cancelAtOrAbove(IDLE_REFINE_PRIORITY);
   }
 
   // Resizes the canvas backing store from cached CSS size + current dpr.
@@ -588,7 +630,8 @@ export class FractalViewer {
           tile.maxFinite,
           tile.cost,
           tile.final,
-          tile.refGen
+          tile.refGen,
+          tile.ranOut
         );
         uploads++;
       }
@@ -643,6 +686,24 @@ export class FractalViewer {
       this.moved = false;
       this.planPrewarm();
       for (const cb of this.listeners.moveend) cb();
+    }
+
+    // Idle refinement: everything drained (corridor, dive cone, visible
+    // work) and the view at rest — spend the spare workers pushing visible
+    // unresolved pixels toward the iteration cap. Replanning is cheap and
+    // idempotent; each pass advances tiles one escalation rung, so a parked
+    // view converges toward the "infinite iterations" ideal on its own.
+    if (
+      !this.moved &&
+      !animating &&
+      !this.exportActive &&
+      this.pointers.size === 0 &&
+      this.pendingTiles.size === 0 &&
+      now - this.lastRefinePlanAt > IDLE_REFINE_REPLAN_MS &&
+      this.engine.isIdle()
+    ) {
+      this.lastRefinePlanAt = now;
+      this.planIdleRefine();
     }
 
     this.raf = requestAnimationFrame(this.frame);
@@ -718,6 +779,7 @@ export class FractalViewer {
         ty,
         size: TILE_SIZE,
         maxIter: this.tileIter(level, tx, ty, this.baseIter(level)),
+        iterCap: capBase(),
         needsRef: level >= PERTURB_MIN_LEVEL,
         priority,
       });
@@ -818,11 +880,85 @@ export class FractalViewer {
       needsMore: kids.some((k) => k.needsMore),
       level,
       cost: 0.1,
+      ranOut: Math.max(...kids.map((k) => k.ranOut)),
+      synth: true,
       refGen: 0,
     });
     this.evictOverflow();
     this.dirty = true;
     return true;
+  }
+
+  // Re-request visible tiles that finalized with unresolved pixels below
+  // the cap, one escalation rung at a time, center-out. Runs only from the
+  // frame loop's idle check; the priority keeps these strictly behind any
+  // real work that appears meanwhile.
+  private planIdleRefine(): void {
+    this.idleKeys.clear();
+    const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
+    const needsRef = vis.level >= PERTURB_MIN_LEVEL;
+    const childLevel = vis.level + 1;
+    const childOk = childLevel <= Math.ceil(MAX_ZOOM) + 2;
+    const childNeedsRef = childLevel >= PERTURB_MIN_LEVEL;
+    const childBase = this.baseIter(childLevel);
+    for (const t of vis.tiles) {
+      const key = this.tileKey(vis.level, t.tx, t.ty);
+      const entry = this.cache.get(key);
+      if (!entry || entry.tex.size - 2 * entry.tex.apron < TILE_SIZE) continue;
+      const cx = t.x + vis.tilePx / 2 - this.cssW / 2;
+      const cy = t.y + vis.tilePx / 2 - this.cssH / 2;
+      const dist = cx * cx + cy * cy;
+      // Pass 1: unresolved pixels below the ceiling — correctness first.
+      if (
+        !entry.needsMore && // the normal refresh path owns provisionals
+        !entry.synth && // synthesized: the children hold the truth
+        entry.ranOut > 0 &&
+        entry.maxIter < refineCeil()
+      ) {
+        const next = Math.min(refineCeil(), entry.maxIter * ITER_ESCALATION);
+        this.idleKeys.add(key);
+        this.engine.requestTile({
+          key,
+          level: vis.level,
+          tx: t.tx,
+          ty: t.ty,
+          size: TILE_SIZE,
+          maxIter: next,
+          // Past the interactive cap the worker keeps laddering up to this
+          // ceiling (escaped references only — see the worker's guard).
+          iterCap: Math.max(capBase(), next),
+          needsRef,
+          priority: IDLE_REFINE_PRIORITY + dist,
+        });
+        continue;
+      }
+      // Pass 2: children of settled tiles — they feed the supersampled
+      // draw path (free antialiasing) and double as one level of zoom-in
+      // prewarm. Strictly behind refinement in priority.
+      if (!childOk || entry.needsMore) continue;
+      for (let j = 0n; j <= 1n; j++) {
+        for (let i = 0n; i <= 1n; i++) {
+          const ctx = t.tx * 2n + i;
+          const cty = t.ty * 2n + j;
+          const childKey = this.tileKey(childLevel, ctx, cty);
+          if (this.cache.has(childKey) || this.pendingTiles.has(childKey)) {
+            continue;
+          }
+          this.idleKeys.add(childKey);
+          this.engine.requestTile({
+            key: childKey,
+            level: childLevel,
+            tx: ctx,
+            ty: cty,
+            size: TILE_SIZE,
+            maxIter: this.tileIter(childLevel, ctx, cty, childBase),
+            iterCap: capBase(),
+            needsRef: childNeedsRef,
+            priority: IDLE_REFINE_PRIORITY * 10 + dist,
+          });
+        }
+      }
+    }
   }
 
   // Per-tile budget: the level base, raised to the parent tile's measured
@@ -845,17 +981,20 @@ export class FractalViewer {
     maxFinite: number,
     cost: number,
     final: boolean,
-    refGen: number
+    refGen: number,
+    ranOut: number
   ): void {
     // Export tiles commit immediately: their progress must not depend on
     // the rAF drain, which is capped per frame and paused in background
     // tabs entirely.
     if (this.exportActive && this.exportPinned.has(key)) {
       this.pendingTiles.delete(key);
-      this.commitTile(key, data, iterDone, maxFinite, cost, final, refGen);
+      this.commitTile(key, data, iterDone, maxFinite, cost, final, refGen, ranOut);
       return;
     }
-    this.pendingTiles.set(key, { data, iterDone, maxFinite, cost, final, refGen });
+    this.pendingTiles.set(key, {
+      data, iterDone, maxFinite, cost, final, refGen, ranOut,
+    });
     this.dirty = true;
   }
 
@@ -866,7 +1005,8 @@ export class FractalViewer {
     maxFinite: number,
     cost: number,
     final: boolean,
-    refGen: number
+    refGen: number,
+    ranOut: number
   ): void {
     const existing = this.cache.get(key);
     // Worker tiles arrive with TILE_APRON texels of border data per side;
@@ -913,6 +1053,8 @@ export class FractalViewer {
       needsMore: (!final && iterDone < ITER_HARD_CAP) || logical < TILE_SIZE,
       level,
       cost,
+      ranOut,
+      synth: false,
       refGen,
     });
 
@@ -1012,6 +1154,60 @@ export class FractalViewer {
       this.cache.delete(evictKey);
     }
     this.dirty = true;
+  }
+
+  // Settled-view supersampling: when a visible tile's four children are
+  // cached and final (the dive prewarm computes them in dead time), draw
+  // the children instead of the tile — the same field at twice the sample
+  // density, i.e. free antialiasing from data that already exists. Only
+  // for fully-faded tiles (fades blend the tile's own textures), and only
+  // when the children's reference generation matches the tile's (mixed
+  // generations visibly disagree in chaos-class regions; generation-free
+  // children — direct path or synthesized — always agree).
+  private drawSupersampled(
+    entry: CacheEntry,
+    level: number,
+    tx: bigint,
+    ty: bigint,
+    xDev: number,
+    yDev: number,
+    sizeDev: number
+  ): boolean {
+    const kids: CacheEntry[] = [];
+    for (let j = 0n; j <= 1n; j++) {
+      for (let i = 0n; i <= 1n; i++) {
+        const kid = this.cache.get(
+          this.tileKey(level + 1, tx * 2n + i, ty * 2n + j)
+        );
+        // A synthesized parent IS its children's data — no generation
+        // check can make them disagree with it.
+        if (
+          !kid ||
+          kid.needsMore ||
+          kid.tex.size - 2 * kid.tex.apron < TILE_SIZE ||
+          (kid.refGen !== 0 && !entry.synth && kid.refGen !== entry.refGen)
+        ) {
+          return false;
+        }
+        kids.push(kid);
+      }
+    }
+    // Diagnostic: tiles drawn supersampled this session (window.__fractileSS).
+    (globalThis as { __fractileSS?: number }).__fractileSS =
+      ((globalThis as { __fractileSS?: number }).__fractileSS ?? 0) + 1;
+    const half = sizeDev / 2;
+    for (let q = 0; q < 4; q++) {
+      this.touch(this.tileKey(level + 1, tx * 2n + BigInt(q & 1), ty * 2n + BigInt(q >> 1)));
+      this.renderer.drawTile(
+        kids[q].tex,
+        xDev + (q & 1) * half,
+        yDev + (q >> 1) * half,
+        half,
+        half,
+        0, 0, 1, 1, 1
+      );
+    }
+    return true;
   }
 
   // Nearest cached ancestor at walk distance >= minDepth: nearby ancestors,
@@ -1128,9 +1324,14 @@ export class FractalViewer {
             }
           }
         }
-        this.renderer.drawTile(
-          entry.tex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, alpha
-        );
+        if (
+          alpha < 1 ||
+          !this.drawSupersampled(entry, vis.level, t.tx, t.ty, xDev, yDev, sizeDev)
+        ) {
+          this.renderer.drawTile(
+            entry.tex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, alpha
+          );
+        }
         if (alpha < 1) fading = true;
         // Re-level visible finals from a stale reference GENERATION: tiles
         // computed under different reference centers visibly disagree in
@@ -1160,9 +1361,10 @@ export class FractalViewer {
             ty: t.ty,
             size: TILE_SIZE,
             maxIter: Math.min(
-              ITER_HARD_CAP,
+              capBase(),
               Math.max(this.baseIter(vis.level), entry.maxIter)
             ),
+            iterCap: capBase(),
             needsRef,
             priority: cx * cx + cy * cy,
           });
@@ -1183,6 +1385,7 @@ export class FractalViewer {
             ty: t.ty,
             size: (pick?.d ?? Infinity) > 2 ? COARSE_TILE_SIZE : TILE_SIZE,
             maxIter: this.tileIter(vis.level, t.tx, t.ty, maxIter),
+            iterCap: capBase(),
             needsRef,
             priority: cx * cx + cy * cy,
           });
@@ -1213,6 +1416,7 @@ export class FractalViewer {
             ty: pty,
             size: TILE_SIZE,
             maxIter: this.tileIter(parentLevel, ptx, pty, parentIter),
+            iterCap: capBase(),
             needsRef: parentNeedsRef,
             priority: PRELOAD_PRIORITY,
           });
@@ -1256,9 +1460,10 @@ export class FractalViewer {
 
     // Keep the planned zoom-out corridor alive across renders: retain() must
     // not cancel its queued jobs, and eviction must not eat its tiles. Same
-    // for an in-progress export's window.
+    // for an in-progress export's window and the idle planner's work.
     for (const key of this.prewarmKeys) wanted.add(key);
     for (const key of this.exportPinned) wanted.add(key);
+    for (const key of this.idleKeys) wanted.add(key);
 
     this.engine.retain(wanted);
     this.lastWanted = wanted;

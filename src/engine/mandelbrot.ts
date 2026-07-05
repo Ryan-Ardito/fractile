@@ -143,21 +143,49 @@ export const escapeTime = (
   return -1;
 };
 
+// Resumable state of a budget-truncated reference computation: `n` entries
+// are written and (zx, zy) is z_n, the next value to write — exactly the
+// loop-top invariant below, so continuing is bit-identical to a fresh run.
+export type RefResume = {
+  zx: bigint;
+  zy: bigint;
+  n: number;
+  orbit: Float64Array;
+};
+
+export type RefResult = {
+  orbit: Float64Array;
+  zx: bigint;
+  zy: bigint;
+  n: number;
+  escaped: boolean;
+};
+
 // Reference orbit in fixed-point, downsampled to float64 pairs. The generator
 // yields every `chunk` iterations so the worker can breathe (progress checks,
-// cancellation) during multi-second computations at extreme depth.
+// cancellation) during multi-second computations at extreme depth. A resume
+// state (from a previous truncated run of the SAME center/bits) continues the
+// BigInt iteration instead of re-paying the whole prefix — extensions after
+// ref-short signals would otherwise recompute everything from z=0.
 export function* referenceOrbit(
   cxFP: bigint,
   cyFP: bigint,
   bits: number,
   maxIter: number,
-  chunk = 1024
-): Generator<number, Float64Array, void> {
+  chunk = 1024,
+  resume?: RefResume
+): Generator<number, RefResult, void> {
   const B = BigInt(bits);
-  let zx = 0n;
-  let zy = 0n;
+  let zx = resume ? resume.zx : 0n;
+  let zy = resume ? resume.zy : 0n;
   const orbit = new Float64Array((maxIter + 1) * 2);
   let n = 0;
+  if (resume) {
+    const prefix = Math.min(resume.orbit.length, 2 * resume.n, orbit.length);
+    orbit.set(resume.orbit.subarray(0, prefix));
+    n = prefix >> 1;
+  }
+  let escaped = false;
   while (n <= maxIter) {
     const fx = fixedToFloat(zx, bits);
     const fy = fixedToFloat(zy, bits);
@@ -165,6 +193,7 @@ export function* referenceOrbit(
     orbit[2 * n + 1] = fy;
     n++;
     if (fx * fx + fy * fy > BAILOUT) {
+      escaped = true;
       break;
     }
     const nzx = fixedMul(zx, zx, B) - fixedMul(zy, zy, B) + cxFP;
@@ -174,7 +203,7 @@ export function* referenceOrbit(
       yield n;
     }
   }
-  return orbit.slice(0, 2 * n);
+  return { orbit: orbit.slice(0, 2 * n), zx, zy, n, escaped };
 }
 
 // Delta iteration against a reference orbit. dz' = (2Z + dz)·dz + dc.

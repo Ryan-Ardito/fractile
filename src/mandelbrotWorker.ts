@@ -51,6 +51,9 @@ type TileMsg = {
   ty: bigint;
   size: number;
   maxIter: number;
+  // Escalation ceiling for this job (idle refinement passes raise it past
+  // the interactive hard cap); see the effective-cap guard in handleTile.
+  iterCap?: number;
   refId: number | null;
   // Reference generation echoed back with results (see pool.ts Reference).
   refGen?: number;
@@ -217,14 +220,28 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // Per-pixel offset scale within the tile: 1 sample pitch on the deep path.
   const pixStep = orbit && deep ? 1 : step;
 
+  // Effective iteration ceiling for this job. Idle refinement may raise it
+  // past the interactive hard cap (toward ITER_ABS_CAP) — but only under an
+  // ESCAPED reference orbit: truncated orbits are memory-capped at the base
+  // cap (the pool never extends them further), and pixels budgeted beyond
+  // the orbit would just park forever.
+  let cap = msg.iterCap ?? ITER_HARD_CAP;
+  if (orbit && cap > ITER_HARD_CAP) {
+    const lastIdx = orbit.length - 2;
+    const refEscaped =
+      orbit[lastIdx] * orbit[lastIdx] + orbit[lastIdx + 1] * orbit[lastIdx + 1] >
+      BAILOUT;
+    if (!refEscaped) cap = ITER_HARD_CAP;
+  }
+
   // First-pass budget: at least the reference orbit's own escape time — the
   // reference sits at the view center, so its escape count (plus margin)
   // predicts the neighborhood's needs far better than a per-level guess and
   // spares fresh deep views the escalation ladder entirely.
-  let budget = maxIter;
+  let budget = Math.min(cap, maxIter);
   if (orbit) {
     budget = Math.min(
-      ITER_HARD_CAP,
+      cap,
       Math.max(budget, Math.ceil((orbit.length >> 1) * 1.25))
     );
   }
@@ -265,7 +282,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   let maxFinite = maxFiniteOf(out);
   while (
     un.count > RANOUT_PIXEL_THRESHOLD &&
-    budget < ITER_HARD_CAP &&
+    budget < cap &&
     performance.now() - t0 < ESCALATE_TIME_BUDGET_MS
   ) {
     // Show progress only once something resolved — an all-ran-out frame
@@ -283,7 +300,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         refGen: msg.refGen ?? 0,
       });
     }
-    const next = Math.min(ITER_HARD_CAP, budget * ITER_ESCALATION);
+    const next = Math.min(cap, budget * ITER_ESCALATION);
     let write = 0;
     for (let i = 0; i < un.count; i++) {
       const idx = un.idx[i];
@@ -436,15 +453,53 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   );
 };
 
+// Resume state of the last budget-truncated reference this worker computed:
+// same-center extensions (the pool's ref-short ×4 ladder) continue the
+// BigInt iteration instead of recomputing the whole prefix. Kept as a copy
+// (the posted orbit's buffer is transferred away); dropped once the orbit
+// escapes — escaped orbits are complete and never extended.
+let refResume:
+  | {
+      cxFP: bigint;
+      cyFP: bigint;
+      bits: number;
+      zx: bigint;
+      zy: bigint;
+      n: number;
+      orbit: Float64Array;
+    }
+  | null = null;
+
 const handleReference = async (msg: ReferenceMsg): Promise<void> => {
   const { id, refId, cxFP, cyFP, bits, maxIter } = msg;
-  const gen = referenceOrbit(cxFP, cyFP, bits, maxIter);
-  let orbit: Float64Array;
+  const resume =
+    refResume &&
+    refResume.cxFP === cxFP &&
+    refResume.cyFP === cyFP &&
+    refResume.bits === bits &&
+    refResume.n <= maxIter
+      ? refResume
+      : undefined;
+  const gen = referenceOrbit(cxFP, cyFP, bits, maxIter, 1024, resume);
   for (;;) {
     const step = gen.next();
     if (step.done) {
-      orbit = step.value;
-      break;
+      const res = step.value;
+      refResume = res.escaped
+        ? null
+        : {
+            cxFP,
+            cyFP,
+            bits,
+            zx: res.zx,
+            zy: res.zy,
+            n: res.n,
+            orbit: res.orbit.slice(),
+          };
+      post({ type: "reference", id, refId, orbit: res.orbit, cxFP, cyFP, bits }, [
+        res.orbit.buffer,
+      ]);
+      return;
     }
     await tick();
     if (cancelled.has(id)) {
@@ -453,9 +508,6 @@ const handleReference = async (msg: ReferenceMsg): Promise<void> => {
       return;
     }
   }
-  post({ type: "reference", id, refId, orbit, cxFP, cyFP, bits }, [
-    orbit.buffer,
-  ]);
 };
 
 onmessage = (e: MessageEvent<InMsg>) => {

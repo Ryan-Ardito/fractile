@@ -60,6 +60,16 @@ export const ITER_ESCALATION = 4;
 // the worst-case orbit at ~67MB. The escalation ladder's wall-clock guard
 // (worker) bounds the BLA-weak worst case in time, not iterations.
 export const ITER_HARD_CAP = 1 << 22;
+// Absolute iteration ceiling, reachable only through idle refinement (16x
+// the interactive cap): tiles that still hold unresolved pixels AT the hard
+// cap keep escalating in dead time, so extreme-depth views where 2^22
+// genuinely binds resolve on their own instead of freezing — the user never
+// gets a "raise max iterations" moment. Requires an ESCAPED reference orbit
+// (truncated ones are memory-capped at the base cap: parked pixels need
+// orbit length ~ budget at 16B/iteration). Escape counts past 2^24 quantize
+// in the R32F tile store; after the palette's log remap the steps are far
+// below one color quantum.
+export const ITER_ABS_CAP = 1 << 26;
 
 const CLAMP_X = 12;
 const CLAMP_Y = 6;

@@ -15,6 +15,9 @@ export type TileJob = {
   ty: bigint;
   size: number;
   maxIter: number;
+  // Ceiling for the worker's self-escalation ladder; defaults to the
+  // interactive hard cap. Idle refinement raises it toward ITER_ABS_CAP.
+  iterCap?: number;
   needsRef: boolean;
   priority: number;
   // Set once the reference-rescue budget is spent: the worker then renders
@@ -64,6 +67,16 @@ export class FractalEngine {
   private refJobPending = false;
   private refRescues = 0;
   private refGen = 0;
+  // Which worker last computed a reference for which center: same-center
+  // extensions route back to it when it's free, so its resume state turns
+  // the ×4 re-length into a continuation instead of a from-scratch BigInt
+  // run. Purely an optimization — any worker computes correctly.
+  private lastRefWorker: {
+    idx: number;
+    cxFP: bigint;
+    cyFP: bigint;
+    bits: number;
+  } | null = null;
 
   constructor(
     private onTile: (
@@ -73,7 +86,8 @@ export class FractalEngine {
       maxFinite: number,
       costMs: number,
       final: boolean,
-      refGen: number
+      refGen: number,
+      ranOut: number
     ) => void,
     poolSize = Math.max(2, (navigator.hardwareConcurrency || 4) - 1)
   ) {
@@ -172,6 +186,10 @@ export class FractalEngine {
     if (queued) {
       queued.priority = job.priority;
       queued.maxIter = Math.max(queued.maxIter, job.maxIter);
+      queued.iterCap = Math.max(
+        queued.iterCap ?? ITER_HARD_CAP,
+        job.iterCap ?? ITER_HARD_CAP
+      );
       return;
     }
     if (job.needsRef && this.ref?.status !== "ready") {
@@ -190,6 +208,28 @@ export class FractalEngine {
       this.parked.set(job.key, job);
     } else {
       this.queue.set(job.key, job);
+    }
+  }
+
+  // True when no work is queued, parked, or running — the signal that spare
+  // capacity exists for idle refinement.
+  isIdle(): boolean {
+    return (
+      this.queue.size === 0 &&
+      this.parked.size === 0 &&
+      !this.refJobPending &&
+      this.workers.every((w) => w.taskId === null)
+    );
+  }
+
+  // Cancel every in-flight job at or above (i.e. less urgent than) the given
+  // priority — idle refinement must yield the pool the moment interactive
+  // work appears, and its long single passes only stop via cancellation.
+  cancelAtOrAbove(minPriority: number): void {
+    for (const [id, meta] of this.inFlight) {
+      if (!meta.isRef && meta.job && meta.job.priority >= minPriority) {
+        this.workers[meta.workerIdx].w.postMessage({ type: "cancel", id });
+      }
     }
   }
 
@@ -231,14 +271,39 @@ export class FractalEngine {
   }
 
   private pump(): void {
+    // Same-center reference extensions prefer the worker holding the resume
+    // state — but only when that worker is free right now; a fresh compute
+    // elsewhere beats waiting.
+    let preferredRefIdx = -1;
+    if (this.refJobPending && this.ref && this.lastRefWorker) {
+      const lw = this.lastRefWorker;
+      if (
+        lw.cxFP === this.ref.cxFP &&
+        lw.cyFP === this.ref.cyFP &&
+        lw.bits === this.ref.bits &&
+        this.workers[lw.idx]?.taskId === null
+      ) {
+        preferredRefIdx = lw.idx;
+      }
+    }
     for (let i = 0; i < this.workers.length; i++) {
       const slot = this.workers[i];
       if (slot.taskId !== null) continue;
 
-      if (this.refJobPending && this.ref) {
+      if (
+        this.refJobPending &&
+        this.ref &&
+        (preferredRefIdx === -1 || preferredRefIdx === i)
+      ) {
         const id = this.nextId++;
         slot.taskId = id;
         this.inFlight.set(id, { key: "", workerIdx: i, isRef: true });
+        this.lastRefWorker = {
+          idx: i,
+          cxFP: this.ref.cxFP,
+          cyFP: this.ref.cyFP,
+          bits: this.ref.bits,
+        };
         slot.w.postMessage({
           type: "reference",
           id,
@@ -267,6 +332,7 @@ export class FractalEngine {
         ty: job.ty,
         size: job.size,
         maxIter: job.maxIter,
+        iterCap: job.iterCap ?? ITER_HARD_CAP,
         refId: job.needsRef ? this.ref?.refId ?? null : null,
         refGen: job.needsRef ? this.ref?.gen ?? 0 : 0,
         noRescue: job.noRescue ?? false,
@@ -292,7 +358,7 @@ export class FractalEngine {
         this.free(msg.id);
         this.onTile(
           msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, true,
-          msg.refGen ?? 0
+          msg.refGen ?? 0, msg.ranOut ?? 0
         );
         this.pump();
         break;
@@ -303,7 +369,7 @@ export class FractalEngine {
       case "tile-progress":
         this.onTile(
           msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, false,
-          msg.refGen ?? 0
+          msg.refGen ?? 0, msg.ranOut ?? 0
         );
         break;
 
