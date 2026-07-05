@@ -22,6 +22,12 @@ export const MIN_ZOOM = 3;
 // grows with precision. 100k zoom levels ≈ 10^30103.
 export const MAX_ZOOM = 100_000;
 export const TILE_SIZE = 256;
+// Tiles are computed with this many texels of true border data on each side
+// (physical = size + 2·TILE_APRON). The bicubic magnification kernel and the
+// palette pass's band-limit spread both read up to 2 texels past a logical
+// edge; without real data there, every tile boundary bends its interpolation
+// against a clamped edge texel and adjacent magnified tiles visibly mismatch.
+export const TILE_APRON = 2;
 export const BASE_ITERATIONS = 1024;
 // Below this level, float64 addresses pixels directly; above it, perturbation.
 export const PERTURB_MIN_LEVEL = 36;

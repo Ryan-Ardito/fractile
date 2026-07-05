@@ -25,7 +25,10 @@ export type TileHandle = {
   dataTex: WebGLTexture;
   colorTex: WebGLTexture | null;
   colorVersion: number;
+  // Physical texture size; the logical tile is the inner square inset by
+  // apron texels of true neighbor data on every side (see TILE_APRON).
   size: number;
+  apron: number;
 };
 
 // Offscreen RGBA8 render target for video export frames.
@@ -133,10 +136,16 @@ void main() {
 const SUBSAMPLE_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uData;
-uniform ivec2 uQuadOrigin; // this child's quadrant origin, in target texels
+uniform ivec2 uQuadOrigin; // this child's quadrant origin, in LOGICAL texels
+uniform int uApron;        // shared apron width (parent and children)
 out vec4 outColor;
 void main() {
-  ivec2 ct = (ivec2(gl_FragCoord.xy) - uQuadOrigin) * 2;
+  // Parent physical texel -> parent logical -> child logical (2:1 point
+  // sample) -> child physical. Parent apron texels map past the child's
+  // logical edge into (or beyond) the child's own apron; the clamp gives an
+  // approximate outer apron, which only softens synthesized tiles' borders.
+  ivec2 ct =
+    (ivec2(gl_FragCoord.xy) - ivec2(uApron) - uQuadOrigin) * 2 + ivec2(uApron);
   int hi = textureSize(uData, 0).x - 1;
   outColor = vec4(texelFetch(uData, clamp(ct, ivec2(0), ivec2(hi)), 0).r, 0.0, 0.0, 1.0);
 }`;
@@ -274,7 +283,14 @@ export class TileRenderer {
     ]) {
       this.compUni.set(name, gl.getUniformLocation(this.compositeProg, name));
     }
-    for (const name of ["uRect", "uViewport", "uData", "uQuadOrigin", "uYSign"]) {
+    for (const name of [
+      "uRect",
+      "uViewport",
+      "uData",
+      "uQuadOrigin",
+      "uApron",
+      "uYSign",
+    ]) {
       this.subUni.set(name, gl.getUniformLocation(this.subsampleProg, name));
     }
     // Palette and subsample passes always use the screen convention; only
@@ -312,7 +328,7 @@ export class TileRenderer {
     this.styleVersion++;
   }
 
-  uploadTile(data: Float32Array, size: number): TileHandle {
+  uploadTile(data: Float32Array, size: number, apron = 0): TileHandle {
     const gl = this.gl;
     const dataTex = gl.createTexture();
     if (!dataTex) throw new Error("texture allocation failed");
@@ -322,7 +338,7 @@ export class TileRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, data);
-    return { dataTex, colorTex: null, colorVersion: -1, size };
+    return { dataTex, colorTex: null, colorVersion: -1, size, apron };
   }
 
   deleteTile(handle: TileHandle): void {
@@ -359,13 +375,21 @@ export class TileRenderer {
     gl.useProgram(this.subsampleProg);
     gl.uniform2f(this.subUni.get("uViewport") ?? null, size, size);
     gl.uniform1i(this.subUni.get("uData") ?? null, 0);
-    const h = size >> 1;
+    const apron = children[0].apron;
+    gl.uniform1i(this.subUni.get("uApron") ?? null, apron);
+    const inner = size - 2 * apron;
+    const h = inner >> 1;
+    // Each quadrant's draw rect also covers the parent apron on its outer
+    // sides, so the 4 rects tile the full physical square.
+    const wq = apron + h;
     for (let j = 0; j <= 1; j++) {
       for (let i = 0; i <= 1; i++) {
         gl.bindTexture(gl.TEXTURE_2D, children[i + 2 * j].dataTex);
-        // QUAD_VERT flips y for screen rendering, so a rect at y = h - j·h
-        // lands on FBO texel rows [j·h, j·h + h).
-        gl.uniform4f(this.subUni.get("uRect") ?? null, i * h, h - j * h, h, h);
+        const x0 = i === 0 ? 0 : wq;
+        const rowStart = j === 0 ? 0 : wq;
+        // QUAD_VERT flips y for screen rendering: rect y = size - (rowStart
+        // + height) lands on FBO texel rows [rowStart, rowStart + wq).
+        gl.uniform4f(this.subUni.get("uRect") ?? null, x0, size - (rowStart + wq), wq, wq);
         gl.uniform2i(this.subUni.get("uQuadOrigin") ?? null, i * h, j * h);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       }
@@ -373,7 +397,7 @@ export class TileRenderer {
 
     // Restore composite state.
     this.restoreCompositeTarget();
-    return { dataTex, colorTex: null, colorVersion: -1, size };
+    return { dataTex, colorTex: null, colorVersion: -1, size, apron };
   }
 
   private restoreCompositeTarget(): void {
@@ -516,12 +540,22 @@ export class TileRenderer {
     const gl = this.gl;
     this.ensureColor(handle);
     gl.bindTexture(gl.TEXTURE_2D, handle.colorTex);
+    // Callers address the LOGICAL tile in [0,1]; inset through the apron so
+    // sampling kernels read real neighbor data across logical edges.
+    const phys = handle.size;
+    const inner = phys - 2 * handle.apron;
     gl.uniform4f(this.compUni.get("uRect") ?? null, x, y, w, h);
-    gl.uniform4f(this.compUni.get("uTexRect") ?? null, u0, v0, uSpan, vSpan);
+    gl.uniform4f(
+      this.compUni.get("uTexRect") ?? null,
+      (handle.apron + u0 * inner) / phys,
+      (handle.apron + v0 * inner) / phys,
+      (uSpan * inner) / phys,
+      (vSpan * inner) / phys
+    );
     gl.uniform1f(this.compUni.get("uAlpha") ?? null, alpha);
     // Ramp from bilinear to B-spline as magnification grows past native:
     // native tiles stay bit-exact, stretched fallbacks get the smooth kernel.
-    const mag = w / (uSpan * handle.size);
+    const mag = w / (uSpan * inner);
     gl.uniform1f(
       this.compUni.get("uCubicMix") ?? null,
       Math.min(1, Math.max(0, mag - 1))

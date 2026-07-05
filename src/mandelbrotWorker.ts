@@ -21,6 +21,7 @@ import {
   ITER_ESCALATION,
   ITER_HARD_CAP,
   RANOUT_PIXEL_THRESHOLD,
+  TILE_APRON,
 } from "./engine/camera";
 import { BlaTable, buildBla } from "./engine/bla";
 import {
@@ -111,9 +112,15 @@ const maxFiniteOf = (out: Float32Array): number => {
 
 const handleTile = async (msg: TileMsg): Promise<void> => {
   const { id, key, level, tx, ty, size, maxIter, refId } = msg;
+  // Tiles are computed with a TILE_APRON-texel border of true neighbor data
+  // on every side: the bicubic magnification kernel and the palette pass's
+  // band-limit spread read past the logical edge, and without real data
+  // there adjacent tiles visibly mismatch at their boundaries. `size` stays
+  // the logical size; everything below runs on the physical grid.
+  const phys = size + 2 * TILE_APRON;
   const t0 = performance.now();
-  const out = new Float32Array(size * size);
-  const un = makeUnresolvedBuf(size * size);
+  const out = new Float32Array(phys * phys);
+  const un = makeUnresolvedBuf(phys * phys);
   const bad = { count: 0, dcx: 0, dcy: 0, e: 0 };
   const deep = level >= DEEP_MIN_LEVEL;
 
@@ -122,7 +129,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // the tile back so the pool can re-reference at one of them. With the
   // rescue budget exhausted, they render black — the pre-detection look.
   const reportBadRef = (): void => {
-    if (un.count + bad.count < size * size) {
+    if (un.count + bad.count < phys * phys) {
       post({
         type: "tile-progress",
         id,
@@ -183,19 +190,24 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       // tolerance, so the origin offset is at most ~2^15 sample pitches.
       // Guard the exact-zero offset (a tile origin flush with the reference,
       // common for rescaled shallow bookmarks): 0 · 2^huge is NaN.
-      dcx0 = dx.m === 0 ? 0 : dx.m * 2 ** (dx.e - dcE);
-      dcy0 = dy.m === 0 ? 0 : dy.m * 2 ** (dy.e - dcE);
+      // Origin backed up by the apron (sample-pitch units on the deep path).
+      dcx0 = (dx.m === 0 ? 0 : dx.m * 2 ** (dx.e - dcE)) - TILE_APRON;
+      dcy0 = (dy.m === 0 ? 0 : dy.m * 2 ** (dy.e - dcE)) - TILE_APRON;
     } else {
-      dcx0 = fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits);
-      dcy0 = fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits);
+      dcx0 =
+        fixedToFloat((tx << shift) - eight - ref.cxFP, ref.bits) -
+        TILE_APRON * step;
+      dcy0 =
+        fixedToFloat((ty << shift) - eight - ref.cyFP, ref.bits) -
+        TILE_APRON * step;
     }
     if (level >= BLA_MIN_LEVEL) {
       if (!ref.bla) ref.bla = buildBla(ref.orbit);
       bla = ref.bla;
     }
   }
-  const x0 = orbit ? dcx0 : Number(tx) * tileW - 8;
-  const y0 = orbit ? dcy0 : Number(ty) * tileW - 8;
+  const x0 = orbit ? dcx0 : Number(tx) * tileW - 8 - TILE_APRON * step;
+  const y0 = orbit ? dcy0 : Number(ty) * tileW - 8 - TILE_APRON * step;
   // Per-pixel offset scale within the tile: 1 sample pitch on the deep path.
   const pixStep = orbit && deep ? 1 : step;
 
@@ -212,20 +224,20 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   }
 
   // First pass, collecting unresolved pixel state.
-  for (let row = 0; row < size; row += ROW_BAND) {
-    const rowEnd = Math.min(row + ROW_BAND, size);
+  for (let row = 0; row < phys; row += ROW_BAND) {
+    const rowEnd = Math.min(row + ROW_BAND, phys);
     if (orbit && deep) {
       perturbRowsDeep(
-        dcx0, dcy0, dcE, size, budget, orbit, row, rowEnd, out, un, bla,
+        dcx0, dcy0, dcE, phys, budget, orbit, row, rowEnd, out, un, bla,
         msg.noRescue ? undefined : bad
       );
     } else if (orbit) {
       perturbRows(
-        dcx0, dcy0, step, size, budget, orbit, row, rowEnd, out, un, bla,
+        dcx0, dcy0, step, phys, budget, orbit, row, rowEnd, out, un, bla,
         msg.noRescue ? undefined : bad
       );
     } else {
-      directRows(level, Number(tx), Number(ty), size, budget, row, rowEnd, out, un);
+      directRows(x0, y0, step, phys, budget, row, rowEnd, out, un);
     }
     await tick();
     if (cancelled.has(id)) {
@@ -252,7 +264,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   ) {
     // Show progress only once something resolved — an all-ran-out frame
     // would paint the tile as (wrong) solid interior.
-    if (un.count < size * size) {
+    if (un.count < phys * phys) {
       post({
         type: "tile-progress",
         id,
@@ -269,8 +281,8 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     let write = 0;
     for (let i = 0; i < un.count; i++) {
       const idx = un.idx[i];
-      const px = idx % size;
-      const py = (idx / size) | 0;
+      const px = idx % phys;
+      const py = (idx / phys) | 0;
       const cx = x0 + (px + 0.5) * pixStep;
       const cy = y0 + (py + 0.5) * pixStep;
       const v = orbit

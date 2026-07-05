@@ -9,6 +9,7 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
   PERTURB_MIN_LEVEL,
+  TILE_APRON,
   TILE_SIZE,
 } from "./camera";
 import { FractalEngine } from "./pool";
@@ -849,7 +850,10 @@ export class FractalViewer {
     refGen: number
   ): void {
     const existing = this.cache.get(key);
-    const size = Math.round(Math.sqrt(data.length));
+    // Worker tiles arrive with TILE_APRON texels of border data per side;
+    // logical size drives all "is this full resolution" decisions.
+    const phys = Math.round(Math.sqrt(data.length));
+    const logical = phys - 2 * TILE_APRON;
     // Never replace better data with worse: a synthesis upgrade may have
     // landed while this job was running, and its child-inherited budget can
     // exceed anything the job computed. Waiters still fire (the entry they
@@ -857,10 +861,10 @@ export class FractalViewer {
     // survivor done so the visible loop stops re-requesting it.
     if (
       existing &&
-      existing.tex.size >= size &&
+      existing.tex.size >= phys &&
       existing.maxIter >= iterDone
     ) {
-      if (final && size >= TILE_SIZE) {
+      if (final && logical >= TILE_SIZE) {
         existing.needsMore = false;
         // The recompute confirmed this tile under the current generation;
         // stamp it so the re-level check doesn't loop on synthesis winners.
@@ -875,7 +879,7 @@ export class FractalViewer {
       return;
     }
     if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
-    const tex = this.renderer.uploadTile(data, size);
+    const tex = this.renderer.uploadTile(data, phys, TILE_APRON);
     const level = levelOfKey(key);
     // Replacements keep the outgoing texture and fade the new one in over it
     // (see prevTex) — coarse-to-full upgrades and escalation frames blend.
@@ -887,7 +891,7 @@ export class FractalViewer {
       maxFinite,
       // More to come while the job is still escalating, or while the tile is
       // only the coarse first pass — either way a full-size request follows.
-      needsMore: (!final && iterDone < ITER_HARD_CAP) || size < TILE_SIZE,
+      needsMore: (!final && iterDone < ITER_HARD_CAP) || logical < TILE_SIZE,
       level,
       cost,
       refGen,

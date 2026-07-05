@@ -389,9 +389,9 @@ const recordUnresolved = (un: UnresolvedBuf, idx: number): void => {
 };
 
 export const directRows = (
-  level: number,
-  tx: number,
-  ty: number,
+  x0: number,
+  y0: number,
+  step: number,
   size: number,
   maxIter: number,
   rowStart: number,
@@ -399,10 +399,6 @@ export const directRows = (
   out: Float32Array,
   un?: UnresolvedBuf
 ): number => {
-  const tileW = 16 * 2 ** -level;
-  const step = tileW / size;
-  const x0 = tx * tileW - 8;
-  const y0 = ty * tileW - 8;
   let ranOut = 0;
   for (let py = rowStart; py < rowEnd; py++) {
     const cy = y0 + (py + 0.5) * step;
