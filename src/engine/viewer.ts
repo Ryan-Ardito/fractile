@@ -108,6 +108,12 @@ type CacheEntry = {
   // Worker-measured compute cost (ms). Eviction sacrifices cheap tiles first,
   // so an expensive deep corridor survives a trip to shallow water and back.
   cost: number;
+  // Reference GENERATION the tile was computed under (0 = direct path or
+  // synthesized). Chaos-class content visibly disagrees across generations
+  // (correlated rounding drift becomes broad brightness shifts after the
+  // palette log-remap), so visible finals from a stale generation are
+  // re-leveled to the active one. Same-center extensions share a generation.
+  refGen: number;
 };
 type ViewerEvent = "moveend";
 
@@ -162,6 +168,7 @@ export class FractalViewer {
       maxFinite: number;
       cost: number;
       final: boolean;
+      refGen: number;
     }
   >();
   private canvasRect: DOMRect | null = null;
@@ -227,8 +234,8 @@ export class FractalViewer {
     this.lastMoveAt = performance.now();
 
     this.engine = new FractalEngine(
-      (key, data, iterDone, maxFinite, cost, final) =>
-        this.onTile(key, data, iterDone, maxFinite, cost, final)
+      (key, data, iterDone, maxFinite, cost, final, refGen) =>
+        this.onTile(key, data, iterDone, maxFinite, cost, final, refGen)
     );
 
     const baseTiles = 1n << BigInt(BASE_GRID_LEVEL);
@@ -560,7 +567,8 @@ export class FractalViewer {
           tile.iterDone,
           tile.maxFinite,
           tile.cost,
-          tile.final
+          tile.final,
+          tile.refGen
         );
         uploads++;
       }
@@ -790,6 +798,7 @@ export class FractalViewer {
       needsMore: kids.some((k) => k.needsMore),
       level,
       cost: 0.1,
+      refGen: 0,
     });
     this.evictOverflow();
     this.dirty = true;
@@ -815,17 +824,18 @@ export class FractalViewer {
     iterDone: number,
     maxFinite: number,
     cost: number,
-    final: boolean
+    final: boolean,
+    refGen: number
   ): void {
     // Export tiles commit immediately: their progress must not depend on
     // the rAF drain, which is capped per frame and paused in background
     // tabs entirely.
     if (this.exportActive && this.exportPinned.has(key)) {
       this.pendingTiles.delete(key);
-      this.commitTile(key, data, iterDone, maxFinite, cost, final);
+      this.commitTile(key, data, iterDone, maxFinite, cost, final, refGen);
       return;
     }
-    this.pendingTiles.set(key, { data, iterDone, maxFinite, cost, final });
+    this.pendingTiles.set(key, { data, iterDone, maxFinite, cost, final, refGen });
     this.dirty = true;
   }
 
@@ -835,7 +845,8 @@ export class FractalViewer {
     iterDone: number,
     maxFinite: number,
     cost: number,
-    final: boolean
+    final: boolean,
+    refGen: number
   ): void {
     const existing = this.cache.get(key);
     const size = Math.round(Math.sqrt(data.length));
@@ -849,7 +860,12 @@ export class FractalViewer {
       existing.tex.size >= size &&
       existing.maxIter >= iterDone
     ) {
-      if (final && size >= TILE_SIZE) existing.needsMore = false;
+      if (final && size >= TILE_SIZE) {
+        existing.needsMore = false;
+        // The recompute confirmed this tile under the current generation;
+        // stamp it so the re-level check doesn't loop on synthesis winners.
+        existing.refGen = refGen;
+      }
       const stale = this.tileWaiters.get(key);
       if (stale) {
         this.tileWaiters.delete(key);
@@ -874,6 +890,7 @@ export class FractalViewer {
       needsMore: (!final && iterDone < ITER_HARD_CAP) || size < TILE_SIZE,
       level,
       cost,
+      refGen,
     });
 
     // Learn this level's iteration need from what the tile actually showed.
@@ -1037,6 +1054,7 @@ export class FractalViewer {
     this.lastLevel = vis.level;
     const maxIter = this.baseIter(vis.level);
     const needsRef = vis.level >= PERTURB_MIN_LEVEL;
+    const activeGen = this.engine.activeRefGen();
     if (needsRef) {
       const ps = this.camera.pixelSizeParts();
       this.engine.ensureReference(
@@ -1091,6 +1109,21 @@ export class FractalViewer {
           entry.tex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, alpha
         );
         if (alpha < 1) fading = true;
+        // Re-level visible finals from a stale reference GENERATION: tiles
+        // computed under different reference centers visibly disagree in
+        // chaos-class regions (correlated rounding drift reads as broad
+        // brightness shifts after the palette log-remap) — the mismatch the
+        // user sees as seams between same-layer tiles after long pans or
+        // rescues. Same-center extensions share a generation and are exempt,
+        // so zoom-out corridors keep their cache hits.
+        if (
+          !entry.needsMore &&
+          entry.refGen !== 0 &&
+          activeGen !== 0 &&
+          entry.refGen !== activeGen
+        ) {
+          entry.needsMore = true;
+        }
         // A provisional frame whose escalation was cancelled off-screen:
         // finish it now that it's visible again (no-op while still running —
         // in-flight keys are deduplicated). Paused during export: these

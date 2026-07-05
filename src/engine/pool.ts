@@ -24,6 +24,13 @@ export type TileJob = {
 
 type Reference = {
   refId: number;
+  // Generation counts CENTER changes (new view anchor, rescue) — same-center
+  // extensions keep it: their orbits are value-identical prefixes, so tiles
+  // computed before and after an extension agree. Tiles from DIFFERENT
+  // generations visibly disagree in chaos-class regions (correlated rounding
+  // drift reads as broad brightness shifts after the palette log-remap), so
+  // the viewer re-levels visible tiles whose generation is stale.
+  gen: number;
   cxFP: bigint;
   cyFP: bigint;
   bits: number;
@@ -56,6 +63,7 @@ export class FractalEngine {
   private ref: Reference | null = null;
   private refJobPending = false;
   private refRescues = 0;
+  private refGen = 0;
 
   constructor(
     private onTile: (
@@ -64,7 +72,8 @@ export class FractalEngine {
       iterDone: number,
       maxFinite: number,
       costMs: number,
-      final: boolean
+      final: boolean,
+      refGen: number
     ) => void,
     poolSize = Math.max(2, (navigator.hardwareConcurrency || 4) - 1)
   ) {
@@ -138,6 +147,7 @@ export class FractalEngine {
     // Headroom so panning and one-level zooms don't churn the reference.
     this.ref = {
       refId: this.nextRefId++,
+      gen: ++this.refGen,
       cxFP,
       cyFP,
       bits,
@@ -148,6 +158,12 @@ export class FractalEngine {
     this.refJobPending = true;
     this.pump();
     return false;
+  }
+
+  // Generation of the active READY reference (0 while none/computing):
+  // the viewer re-levels visible tiles whose stored generation is older.
+  activeRefGen(): number {
+    return this.ref && this.ref.status === "ready" ? this.ref.gen : 0;
   }
 
   requestTile(job: TileJob): void {
@@ -252,6 +268,7 @@ export class FractalEngine {
         size: job.size,
         maxIter: job.maxIter,
         refId: job.needsRef ? this.ref?.refId ?? null : null,
+        refGen: job.needsRef ? this.ref?.gen ?? 0 : 0,
         noRescue: job.noRescue ?? false,
       });
     }
@@ -273,7 +290,10 @@ export class FractalEngine {
     switch (msg.type) {
       case "tile": {
         this.free(msg.id);
-        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, true);
+        this.onTile(
+          msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, true,
+          msg.refGen ?? 0
+        );
         this.pump();
         break;
       }
@@ -281,7 +301,10 @@ export class FractalEngine {
       // Provisional frame from a still-running adaptive escalation: display
       // it, but the worker slot stays busy and the job stays cancellable.
       case "tile-progress":
-        this.onTile(msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, false);
+        this.onTile(
+          msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, false,
+          msg.refGen ?? 0
+        );
         break;
 
       case "aborted":
@@ -310,6 +333,7 @@ export class FractalEngine {
             this.refRescues++;
             this.ref = {
               refId: this.nextRefId++,
+              gen: ++this.refGen,
               cxFP: rescale(msg.cxFP, msg.bits, r.bits),
               cyFP: rescale(msg.cyFP, msg.bits, r.bits),
               bits: r.bits,

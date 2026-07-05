@@ -50,6 +50,8 @@ type TileMsg = {
   size: number;
   maxIter: number;
   refId: number | null;
+  // Reference generation echoed back with results (see pool.ts Reference).
+  refGen?: number;
   // The pool's reference-rescue budget is exhausted: render dc-starved
   // pixels black instead of signalling ref-unsuitable again.
   noRescue?: boolean;
@@ -130,6 +132,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         iterDone: maxIter,
         maxFinite: maxFiniteOf(out),
         costMs: performance.now() - t0,
+        refGen: msg.refGen ?? 0,
       });
     }
     // Rescue center in absolute fixed-point (relative to the reference this
@@ -259,6 +262,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         iterDone: budget,
         maxFinite,
         costMs: performance.now() - t0,
+        refGen: msg.refGen ?? 0,
       });
     }
     const next = Math.min(ITER_HARD_CAP, budget * ITER_ESCALATION);
@@ -333,6 +337,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         iterDone: budget,
         maxFinite,
         costMs: performance.now() - t0,
+        refGen: msg.refGen ?? 0,
       });
       post({ type: "ref-short", id, key });
       return;
@@ -349,6 +354,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       iterDone: budget,
       maxFinite,
       costMs: performance.now() - t0,
+      refGen: msg.refGen ?? 0,
     },
     [out.buffer]
   );
