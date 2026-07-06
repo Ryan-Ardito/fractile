@@ -737,10 +737,16 @@ export class TileRenderer {
     gl.uniform1f(this.compUni.get("uAlpha") ?? null, alpha);
     // Ramp from bilinear to B-spline as magnification grows past native:
     // native tiles stay bit-exact, stretched fallbacks get the smooth kernel.
+    // Preview stand-ins are exempt: their row-by-row fill leaves an
+    // opaque->transparent boundary at the flush high-water mark, and the
+    // B-spline's wide kernel smears that alpha edge into a feathered band over
+    // the ancestor beneath (only ever horizontal, since whole rows land at
+    // once). Bilinear keeps the reveal edge tight; the detail is transient
+    // anyway and sharpens on commit.
     const mag = w / (uSpan * inner);
     gl.uniform1f(
       this.compUni.get("uCubicMix") ?? null,
-      Math.min(1, Math.max(0, mag - 1))
+      handle.preview ? 0 : Math.min(1, Math.max(0, mag - 1))
     );
     gl.uniform1f(this.compUni.get("uTexSize") ?? null, handle.size);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
