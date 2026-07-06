@@ -191,7 +191,14 @@ out vec4 outColor;
 // magnified tiles read as a gaussian-like blur where bilinear reads as boxy
 // tenting. Taps may cross a sub-rect edge into the rest of the same ancestor
 // texture, which is the correct neighboring content anyway.
-vec3 bspline(vec2 uv) {
+//
+// Filters the full PREMULTIPLIED RGBA, not just rgb: on preview stand-ins the
+// tile carries interior alpha edges (transparent uncomputed texels beside
+// opaque computed ones). Smoothing rgb with this wide kernel while taking
+// alpha from a single bilinear tap desyncs the premultiplied ratio at those
+// edges, so the un-premultiplied color rgb/a overshoots — a bright fringe
+// along the flush boundary. Same kernel for both keeps the ratio in gamut.
+vec4 bspline(vec2 uv) {
   vec2 ts = vec2(uTexSize);
   vec2 st = uv * ts - 0.5;
   vec2 base = floor(st);
@@ -205,19 +212,18 @@ vec3 bspline(vec2 uv) {
   vec2 g1 = 1.0 - g0;
   vec2 uv0 = (base - 0.5 + w1 / g0) / ts;
   vec2 uv1 = (base + 1.5 + w3 / g1) / ts;
-  return g0.y * (g0.x * texture(uColor, vec2(uv0.x, uv0.y)).rgb +
-                 g1.x * texture(uColor, vec2(uv1.x, uv0.y)).rgb) +
-         g1.y * (g0.x * texture(uColor, vec2(uv0.x, uv1.y)).rgb +
-                 g1.x * texture(uColor, vec2(uv1.x, uv1.y)).rgb);
+  return g0.y * (g0.x * texture(uColor, vec2(uv0.x, uv0.y)) +
+                 g1.x * texture(uColor, vec2(uv1.x, uv0.y))) +
+         g1.y * (g0.x * texture(uColor, vec2(uv0.x, uv1.y)) +
+                 g1.x * texture(uColor, vec2(uv1.x, uv1.y)));
 }
 
 void main() {
   vec2 uv = uTexRect.xy + vUV * uTexRect.zw;
   // colorTex is PREMULTIPLIED (see the palette pass); scale by uAlpha only.
   vec4 c = texture(uColor, uv);
-  vec3 rgb = c.rgb;
-  if (uCubicMix > 0.0) rgb = mix(rgb, bspline(uv), uCubicMix);
-  outColor = vec4(rgb * uAlpha, c.a * uAlpha);
+  if (uCubicMix > 0.0) c = mix(c, bspline(uv), uCubicMix);
+  outColor = c * uAlpha;
 }`;
 
 const compile = (
