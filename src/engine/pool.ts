@@ -89,6 +89,15 @@ export class FractalEngine {
       refGen: number,
       ranOut: number
     ) => void,
+    // Partial-progress rows from a still-running job (time-based flushes);
+    // purely a display preview — never cache-canonical data.
+    private onPatch?: (
+      key: string,
+      data: Float32Array,
+      r0: number,
+      r1: number,
+      phys: number
+    ) => void,
     poolSize = Math.max(2, (navigator.hardwareConcurrency || 4) - 1)
   ) {
     for (let i = 0; i < poolSize; i++) {
@@ -371,6 +380,10 @@ export class FractalEngine {
           msg.key, msg.data, msg.iterDone, msg.maxFinite, msg.costMs, false,
           msg.refGen ?? 0, msg.ranOut ?? 0
         );
+        break;
+
+      case "tile-patch":
+        this.onPatch?.(msg.key, msg.data, msg.r0, msg.r1, msg.phys);
         break;
 
       case "aborted":

@@ -111,6 +111,10 @@ const CANARY_MIN_BLACK = 2048;
 // where it can't (shallow band, unsuitable reference), stop honestly rather
 // than crawl — remaining unresolved pixels render black as before.
 const ESCALATE_TIME_BUDGET_MS = 10000;
+// Time-based progress flushing: any pass running longer than this posts a
+// partial patch (rows so far / current state), so slow tiles paint at a
+// steady few Hz instead of the screen looking hung until the pass ends.
+const FLUSH_MS = 300;
 
 const maxFiniteOf = (out: Float32Array): number => {
   let max = 0;
@@ -246,6 +250,27 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     );
   }
 
+  // Partial-progress patch: rows [from, to) of the buffer so far. The
+  // viewer applies these in place over a prefilled stand-in, so slow tiles
+  // paint progressively instead of appearing all at once.
+  let lastFlush = t0;
+  let flushedRows = 0;
+  const flushRows = (to: number): void => {
+    post(
+      {
+        type: "tile-patch",
+        id,
+        key,
+        phys,
+        r0: flushedRows,
+        r1: to,
+        data: out.slice(flushedRows * phys, to * phys),
+      }
+    );
+    flushedRows = to;
+    lastFlush = performance.now();
+  };
+
   // First pass, collecting unresolved pixel state.
   for (let row = 0; row < phys; row += ROW_BAND) {
     const rowEnd = Math.min(row + ROW_BAND, phys);
@@ -267,6 +292,9 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
       cancelled.delete(id);
       post({ type: "aborted", id, key });
       return;
+    }
+    if (rowEnd < phys && performance.now() - lastFlush >= FLUSH_MS) {
+      flushRows(rowEnd);
     }
   }
   if (bad.count > 0) {
@@ -350,6 +378,11 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
           post({ type: "aborted", id, key });
           return;
         }
+        // Escalation touches scattered pixels; flush the whole buffer.
+        if (performance.now() - lastFlush >= FLUSH_MS) {
+          flushedRows = 0;
+          flushRows(phys);
+        }
       }
     }
     un.count = write;
@@ -405,6 +438,10 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
               cancelled.delete(id);
               post({ type: "aborted", id, key });
               return;
+            }
+            if (performance.now() - lastFlush >= FLUSH_MS) {
+              flushedRows = 0;
+              flushRows(phys);
             }
           }
         }

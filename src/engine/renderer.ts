@@ -34,6 +34,9 @@ export type TileHandle = {
   // apron texels of true neighbor data on every side (see TILE_APRON).
   size: number;
   apron: number;
+  // Progress stand-in: the palette pass makes its value-0 texels
+  // transparent (see uPreview).
+  preview: boolean;
 };
 
 // Offscreen RGBA8 render target for video export frames.
@@ -71,6 +74,10 @@ uniform float uBandContrast;
 uniform float uBandOffset;
 uniform float uSaturation;
 uniform float uLightness;
+// 1 on progress stand-ins: value-0 texels (not yet computed) become
+// transparent so the smooth ancestor fallback shows through beneath.
+// Normal tiles keep alpha 1 everywhere (0 = interior = opaque black).
+uniform float uPreview;
 in vec2 vUV;
 out vec4 outColor;
 
@@ -98,17 +105,18 @@ void main() {
 
   // The data can only resolve palette features wider than one sample step;
   // fade bands/hue toward their means where they cycle faster than that,
-  // rather than render detail the tile doesn't actually contain.
-  float spread = max(
-    max(
-      abs(it - fetchIter(p + ivec2(1, 0), hi)),
-      abs(it - fetchIter(p + ivec2(-1, 0), hi))
-    ),
-    max(
-      abs(it - fetchIter(p + ivec2(0, 1), hi)),
-      abs(it - fetchIter(p + ivec2(0, -1), hi))
-    )
-  );
+  // rather than render detail the tile doesn't actually contain. On preview
+  // stand-ins a 0-valued neighbor is ABSENT data, not a real cliff — it
+  // must not gray out the last computed row at the patch boundary.
+  float n0 = fetchIter(p + ivec2(1, 0), hi);
+  float n1 = fetchIter(p + ivec2(-1, 0), hi);
+  float n2 = fetchIter(p + ivec2(0, 1), hi);
+  float n3 = fetchIter(p + ivec2(0, -1), hi);
+  float d0 = (uPreview > 0.5 && n0 <= 0.0) ? 0.0 : abs(it - n0);
+  float d1 = (uPreview > 0.5 && n1 <= 0.0) ? 0.0 : abs(it - n1);
+  float d2 = (uPreview > 0.5 && n2 <= 0.0) ? 0.0 : abs(it - n2);
+  float d3 = (uPreview > 0.5 && n3 <= 0.0) ? 0.0 : abs(it - n3);
+  float spread = max(max(d0, d1), max(d2, d3));
   spread = max(spread, 1e-20);
   float bandAA = smoothstep(1.0, 2.0, 6.28318530718 / (uBandSpacing * spread));
   float hueAA = smoothstep(1.0, 2.0, 360.0 / (uPaletteScale * spread));
@@ -130,7 +138,12 @@ void main() {
   else if (hp < 5.0) rgb = vec3(x, 0.0, c);
   else               rgb = vec3(c, 0.0, x);
   float m = light - 0.5 * c;
-  outColor = vec4(clamp(rgb + m, 0.0, 1.0), 1.0);
+  float a = it <= 0.0 ? 1.0 - uPreview : 1.0;
+  // PREMULTIPLIED: transparent texels must carry zero rgb, or the
+  // compositor's bilinear filtering bleeds their black into the boundary
+  // row (a dark seam along partial-patch edges). a = 1 everywhere on
+  // normal tiles, so their colors are untouched.
+  outColor = vec4(clamp(rgb + m, 0.0, 1.0) * a, a);
 }`;
 
 // Build a parent tile's escape-time data by 2:1 subsampling a child tile
@@ -154,6 +167,7 @@ void main() {
   int hi = textureSize(uData, 0).x - 1;
   outColor = vec4(texelFetch(uData, clamp(ct, ivec2(0), ivec2(hi)), 0).r, 0.0, 0.0, 1.0);
 }`;
+
 
 const COMPOSITE_FRAG = `#version 300 es
 precision highp float;
@@ -193,9 +207,11 @@ vec3 bspline(vec2 uv) {
 
 void main() {
   vec2 uv = uTexRect.xy + vUV * uTexRect.zw;
-  vec3 rgb = texture(uColor, uv).rgb;
+  // colorTex is PREMULTIPLIED (see the palette pass); scale by uAlpha only.
+  vec4 c = texture(uColor, uv);
+  vec3 rgb = c.rgb;
   if (uCubicMix > 0.0) rgb = mix(rgb, bspline(uv), uCubicMix);
-  outColor = vec4(rgb * uAlpha, uAlpha);
+  outColor = vec4(rgb * uAlpha, c.a * uAlpha);
 }`;
 
 const compile = (
@@ -280,7 +296,7 @@ export class TileRenderer {
     this.paletteProg = link(gl, PALETTE_FRAG);
     this.compositeProg = link(gl, COMPOSITE_FRAG);
     this.subsampleProg = link(gl, SUBSAMPLE_FRAG);
-    for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData", "uYSign"]) {
+    for (const name of [...STYLE_UNIFORMS, "uRect", "uViewport", "uData", "uYSign", "uPreview"]) {
       this.paletteUni.set(name, gl.getUniformLocation(this.paletteProg, name));
     }
     for (const name of [
@@ -366,7 +382,7 @@ export class TileRenderer {
     }
   }
 
-  uploadTile(data: Float32Array, size: number, apron = 0): TileHandle {
+  uploadTile(data: Float32Array, size: number, apron = 0, preview = false): TileHandle {
     const gl = this.gl;
     const dataTex = gl.createTexture();
     if (!dataTex) throw new Error("texture allocation failed");
@@ -384,6 +400,7 @@ export class TileRenderer {
       exportColorVersion: -1,
       size,
       apron,
+      preview,
     };
   }
 
@@ -452,6 +469,7 @@ export class TileRenderer {
       exportColorVersion: -1,
       size,
       apron,
+      preview: false,
     };
   }
 
@@ -461,6 +479,18 @@ export class TileRenderer {
     gl.viewport(0, 0, this.viewportW, this.viewportH);
     gl.enable(gl.BLEND);
     gl.useProgram(this.compositeProg);
+  }
+
+  // Overwrite rows [r0, r1) of a tile's escape-time data in place (partial
+  // progress from a still-running job) and invalidate its colorizations.
+  patchTile(handle: TileHandle, data: Float32Array, r0: number, r1: number): void {
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, handle.dataTex);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D, 0, 0, r0, handle.size, r1 - r0, gl.RED, gl.FLOAT, data
+    );
+    handle.colorVersion = -1;
+    handle.exportColorVersion = -1;
   }
 
   begin(wDev: number, hDev: number): void {
@@ -582,6 +612,7 @@ export class TileRenderer {
       gl.uniform1f(this.paletteUni.get("uLightness") ?? null, style.lightness);
     }
     gl.uniform1i(this.paletteUni.get("uData") ?? null, 0);
+    gl.uniform1f(this.paletteUni.get("uPreview") ?? null, handle.preview ? 1 : 0);
     gl.uniform4f(this.paletteUni.get("uRect") ?? null, 0, 0, size, size);
     gl.uniform2f(this.paletteUni.get("uViewport") ?? null, size, size);
     gl.bindTexture(gl.TEXTURE_2D, handle.dataTex);

@@ -140,6 +140,11 @@ type CacheEntry = {
   // Built by GPU subsampling of children rather than computed (refGen 0 is
   // NOT a synth marker: direct-path tiles carry it too).
   synth: boolean;
+  // Progress stand-in for a still-running job: zero-initialized data whose
+  // uncomputed texels render TRANSPARENT (renderer uPreview), so the smooth
+  // ancestor fallback shows through until real pixels land. Replaced by the
+  // job's first commit; never treated as computed data anywhere.
+  preview: boolean;
   // Reference GENERATION the tile was computed under (0 = direct path or
   // synthesized). Chaos-class content visibly disagrees across generations
   // (correlated rounding drift becomes broad brightness shifts after the
@@ -208,6 +213,9 @@ export class FractalViewer {
   // Keys issued by the idle planner (refinement + children) — kept in the
   // wanted set so retain() doesn't cancel them at the next repaint.
   private idleKeys = new Set<string>();
+  // Keys drawn at the display level in the last render — the gate for
+  // partial-progress patches (previews are pointless off screen).
+  private visibleKeys = new Set<string>();
   private canvasRect: DOMRect | null = null;
   private pinch: { dist: number; zoom: number } | null = null;
   private lastTap: { x: number; y: number; t: number } | null = null;
@@ -272,7 +280,8 @@ export class FractalViewer {
 
     this.engine = new FractalEngine(
       (key, data, iterDone, maxFinite, cost, final, refGen, ranOut) =>
-        this.onTile(key, data, iterDone, maxFinite, cost, final, refGen, ranOut)
+        this.onTile(key, data, iterDone, maxFinite, cost, final, refGen, ranOut),
+      (key, data, r0, r1, phys) => this.onPatch(key, data, r0, r1, phys)
     );
 
     const baseTiles = 1n << BigInt(BASE_GRID_LEVEL);
@@ -395,6 +404,10 @@ export class FractalViewer {
     };
     this.prewarmKeys.clear();
     this.centerKeys.clear();
+    // The export owns dead time: idle refinement/children work would only
+    // compete with corridor materialization for workers.
+    this.idleKeys.clear();
+    this.engine.cancelAtOrAbove(IDLE_REFINE_PRIORITY);
     this.exportStats = {};
     (globalThis as Record<string, unknown>).__fractileExportStats =
       this.exportStats;
@@ -563,7 +576,7 @@ export class FractalViewer {
     let complete = true;
     for (const t of vis.tiles) {
       const entry = this.cache.get(this.tileKey(vis.level, t.tx, t.ty));
-      if (entry && entry.tex.size >= TILE_SIZE) {
+      if (entry && !entry.preview && entry.tex.size >= TILE_SIZE) {
         this.renderer.drawTile(
           entry.tex, t.x, t.y, vis.tilePx, vis.tilePx, 0, 0, 1, 1, 1
         );
@@ -845,7 +858,7 @@ export class FractalViewer {
         const kid = this.cache.get(
           this.tileKey(level + 1, tx * 2n + i, ty * 2n + j)
         );
-        if (!kid || kid.tex.size < TILE_SIZE) return false;
+        if (!kid || kid.preview || kid.tex.size < TILE_SIZE) return false;
         if (kid.needsMore && !allowProvisional) return false;
         kids.push(kid);
       }
@@ -853,11 +866,10 @@ export class FractalViewer {
     const synthIter = Math.min(...kids.map((k) => k.maxIter));
     const key = this.tileKey(level, tx, ty);
     const existing = this.cache.get(key);
-    if (existing && existing.tex.size >= TILE_SIZE) {
-      const required = existing.needsMore
-        ? existing.maxIter + 1
-        : existing.maxIter * 4;
-      if (synthIter < required) return false;
+    if (existing && existing.tex.size >= TILE_SIZE && !existing.preview) {
+      // A full escalation rung either way: provisional parents re-upgrading
+      // on every child improvement refire the fade and read as flicker.
+      if (synthIter < existing.maxIter * 4) return false;
     }
     const tex = this.renderer.synthesizeTile([
       kids[0].tex,
@@ -869,12 +881,17 @@ export class FractalViewer {
     // Diagnostic: visible in the console as window.__fractileSynth.
     (globalThis as { __fractileSynth?: number }).__fractileSynth =
       ((globalThis as { __fractileSynth?: number }).__fractileSynth ?? 0) + 1;
+    const wasPreview = existing?.preview ?? false;
     if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
+    if (wasPreview) this.renderer.deleteTile(existing!.tex);
     this.cache.set(key, {
       tex,
-      // Replacements fade in over the outgoing texture like any commit.
-      prevTex: existing ? existing.tex : null,
-      loadedAt: performance.now(),
+      // Replacements fade in over the outgoing texture like any commit —
+      // except replaced previews, whose content is already on screen.
+      prevTex: existing && !wasPreview ? existing.tex : null,
+      loadedAt: wasPreview
+        ? performance.now() - FADE_MS
+        : performance.now(),
       maxIter: synthIter,
       maxFinite: Math.max(...kids.map((k) => k.maxFinite)),
       needsMore: kids.some((k) => k.needsMore),
@@ -882,6 +899,7 @@ export class FractalViewer {
       cost: 0.1,
       ranOut: Math.max(...kids.map((k) => k.ranOut)),
       synth: true,
+      preview: false,
       refGen: 0,
     });
     this.evictOverflow();
@@ -894,6 +912,13 @@ export class FractalViewer {
   // frame loop's idle check; the priority keeps these strictly behind any
   // real work that appears meanwhile.
   private planIdleRefine(): void {
+    // Diagnostic (console): why the last idle plan did or didn't refine.
+    const dbg = {
+      refined: 0, children: 0,
+      noEntry: 0, needsMore: 0, synth: 0, clean: 0, atCeil: 0, small: 0,
+      iterMax: 0, ranOutSum: 0,
+    };
+    (globalThis as Record<string, unknown>).__fractileIdle = dbg;
     this.idleKeys.clear();
     const vis = this.camera.visibleTiles(this.cssW, this.cssH, this.dpr);
     const needsRef = vis.level >= PERTURB_MIN_LEVEL;
@@ -904,7 +929,14 @@ export class FractalViewer {
     for (const t of vis.tiles) {
       const key = this.tileKey(vis.level, t.tx, t.ty);
       const entry = this.cache.get(key);
-      if (!entry || entry.tex.size - 2 * entry.tex.apron < TILE_SIZE) continue;
+      if (!entry) { dbg.noEntry++; continue; }
+      if (entry.tex.size - 2 * entry.tex.apron < TILE_SIZE) { dbg.small++; continue; }
+      if (entry.needsMore) dbg.needsMore++;
+      else if (entry.synth) dbg.synth++;
+      else if (entry.ranOut === 0) dbg.clean++;
+      else if (entry.maxIter >= refineCeil()) dbg.atCeil++;
+      dbg.iterMax = Math.max(dbg.iterMax, entry.maxIter);
+      dbg.ranOutSum += entry.ranOut;
       const cx = t.x + vis.tilePx / 2 - this.cssW / 2;
       const cy = t.y + vis.tilePx / 2 - this.cssH / 2;
       const dist = cx * cx + cy * cy;
@@ -915,6 +947,7 @@ export class FractalViewer {
         entry.ranOut > 0 &&
         entry.maxIter < refineCeil()
       ) {
+        dbg.refined++;
         const next = Math.min(refineCeil(), entry.maxIter * ITER_ESCALATION);
         this.idleKeys.add(key);
         this.engine.requestTile({
@@ -923,9 +956,12 @@ export class FractalViewer {
           tx: t.tx,
           ty: t.ty,
           size: TILE_SIZE,
+          // Exactly one rung per job: the escalation guard only checks
+          // BETWEEN rungs, so letting the in-job ladder run to the ceiling
+          // commits to unguarded multi-10s rungs at no-BLA levels and
+          // monopolizes the pool. One bounded pass, then the next idle
+          // replan takes the next rung.
           maxIter: next,
-          // Past the interactive cap the worker keeps laddering up to this
-          // ceiling (escaped references only — see the worker's guard).
           iterCap: Math.max(capBase(), next),
           needsRef,
           priority: IDLE_REFINE_PRIORITY + dist,
@@ -944,6 +980,7 @@ export class FractalViewer {
           if (this.cache.has(childKey) || this.pendingTiles.has(childKey)) {
             continue;
           }
+          dbg.children++;
           this.idleKeys.add(childKey);
           this.engine.requestTile({
             key: childKey,
@@ -998,6 +1035,71 @@ export class FractalViewer {
     this.dirty = true;
   }
 
+  // Partial rows from a still-running job: a pure display preview, applied
+  // in place, only for tiles currently on screen. A fresh tile first gets a
+  // full-size stand-in prefilled from the best content already showing (its
+  // own coarse pass, else the fallback ancestor), so partial rows land on
+  // sensible data instead of black. The stand-in carries maxIter 0 and
+  // needsMore, so every real commit outranks it and no accept/refine path
+  // mistakes it for computed data.
+  private onPatch(
+    key: string,
+    data: Float32Array,
+    r0: number,
+    r1: number,
+    phys: number
+  ): void {
+    if ((globalThis as { __fractileNoPatch?: boolean }).__fractileNoPatch) return;
+    if (!this.visibleKeys.has(key)) return;
+    let entry = this.cache.get(key);
+    // Never preview over strictly better data (a synthesis upgrade may
+    // have landed a bigger texture while this job was running).
+    if (entry && entry.tex.size > phys) return;
+    if (!entry || entry.tex.size !== phys) {
+      const level = parseInt(key, 10);
+      const prevMaxFinite = entry?.maxFinite ?? 0;
+      // The displaced content (a coarse pass, or a previous stand-in's
+      // base) stays as the preview's opaque base layer — throwing it away
+      // would visibly regress to the blurrier ancestor until rows land.
+      let base: TileHandle | null = null;
+      if (entry) {
+        if (entry.preview) {
+          base = entry.prevTex;
+          this.renderer.deleteTile(entry.tex);
+        } else {
+          if (entry.prevTex) this.renderer.deleteTile(entry.prevTex);
+          base = entry.tex;
+        }
+      }
+      // Zero-initialized stand-in: uncomputed texels are transparent (the
+      // base/fallback is drawn beneath preview tiles), computed rows
+      // appear sharp as they land — no data-space upscaling, no mosaic.
+      entry = {
+        tex: this.renderer.uploadTile(
+          new Float32Array(phys * phys), phys, TILE_APRON, true
+        ),
+        prevTex: base,
+        loadedAt: performance.now() - FADE_MS,
+        maxIter: 0,
+        maxFinite: prevMaxFinite,
+        needsMore: true,
+        level,
+        cost: 0.05,
+        ranOut: phys * phys,
+        synth: false,
+        preview: true,
+        refGen: 0,
+      };
+      this.cache.set(key, entry);
+      this.evictOverflow();
+    }
+    this.renderer.patchTile(entry.tex, data, r0, r1);
+    // Diagnostic: partial patches applied this session (window.__fractilePatch).
+    (globalThis as { __fractilePatch?: number }).__fractilePatch =
+      ((globalThis as { __fractilePatch?: number }).__fractilePatch ?? 0) + 1;
+    this.dirty = true;
+  }
+
   private commitTile(
     key: string,
     data: Float32Array,
@@ -1037,15 +1139,22 @@ export class FractalViewer {
       this.dirty = true;
       return;
     }
+    const wasPreview = existing?.preview ?? false;
     if (existing?.prevTex) this.renderer.deleteTile(existing.prevTex);
+    if (wasPreview) this.renderer.deleteTile(existing!.tex);
     const tex = this.renderer.uploadTile(data, phys, TILE_APRON);
     const level = levelOfKey(key);
     // Replacements keep the outgoing texture and fade the new one in over it
     // (see prevTex) — coarse-to-full upgrades and escalation frames blend.
     this.cache.set(key, {
       tex,
-      prevTex: existing ? existing.tex : null,
-      loadedAt: performance.now(),
+      // A replaced preview already displayed this content through its
+      // patches: swap instantly (no fade base, no fade) — fading from its
+      // low-res base would flash the tile BACKWARDS on completion.
+      prevTex: existing && !wasPreview ? existing.tex : null,
+      loadedAt: wasPreview
+        ? performance.now() - FADE_MS
+        : performance.now(),
       maxIter: iterDone,
       maxFinite,
       // More to come while the job is still escalating, or while the tile is
@@ -1055,6 +1164,7 @@ export class FractalViewer {
       cost,
       ranOut,
       synth: false,
+      preview: false,
       refGen,
     });
 
@@ -1171,7 +1281,8 @@ export class FractalViewer {
     ty: bigint,
     xDev: number,
     yDev: number,
-    sizeDev: number
+    sizeDev: number,
+    wanted: Set<string>
   ): boolean {
     const kids: CacheEntry[] = [];
     for (let j = 0n; j <= 1n; j++) {
@@ -1184,6 +1295,7 @@ export class FractalViewer {
         if (
           !kid ||
           kid.needsMore ||
+          kid.preview ||
           kid.tex.size - 2 * kid.tex.apron < TILE_SIZE ||
           (kid.refGen !== 0 && !entry.synth && kid.refGen !== entry.refGen)
         ) {
@@ -1197,7 +1309,13 @@ export class FractalViewer {
       ((globalThis as { __fractileSS?: number }).__fractileSS ?? 0) + 1;
     const half = sizeDev / 2;
     for (let q = 0; q < 4; q++) {
-      this.touch(this.tileKey(level + 1, tx * 2n + BigInt(q & 1), ty * 2n + BigInt(q >> 1)));
+      const childKey = this.tileKey(
+        level + 1, tx * 2n + BigInt(q & 1), ty * 2n + BigInt(q >> 1)
+      );
+      this.touch(childKey);
+      // Actively displayed: eviction or retain() taking a drawn child pops
+      // the tile between sharp and soft.
+      wanted.add(childKey);
       this.renderer.drawTile(
         kids[q].tex,
         xDev + (q & 1) * half,
@@ -1230,9 +1348,25 @@ export class FractalViewer {
       const entry = this.touch(
         this.tileKey(level - d, tx >> shift, ty >> shift)
       );
-      if (entry) return { entry, d };
+      if (entry && !entry.preview) return { entry, d };
     }
     return null;
+  }
+
+  // Logical sub-rect of a fallback ancestor covering tile (tx, ty).
+  // Sub-rect offsets via fixed-point: remainders can exceed float64's
+  // integer range at large d, so treat them as d-bit fractions.
+  private fallbackRect(
+    tx: bigint,
+    ty: bigint,
+    d: number
+  ): { u0: number; v0: number; span: number } {
+    const shift = BigInt(d);
+    return {
+      u0: fixedToFloat(tx - ((tx >> shift) << shift), d),
+      v0: fixedToFloat(ty - ((ty >> shift) << shift), d),
+      span: 2 ** -d,
+    };
   }
 
   private drawFallbackPick(
@@ -1243,14 +1377,7 @@ export class FractalViewer {
     size: number,
     pick: { entry: CacheEntry; d: number }
   ): void {
-    const shift = BigInt(pick.d);
-    const ptx = tx >> shift;
-    const pty = ty >> shift;
-    const span = 2 ** -pick.d;
-    // Sub-rect offsets via fixed-point: remainders can exceed float64's
-    // integer range at large d, so treat them as d-bit fractions.
-    const u0 = fixedToFloat(tx - (ptx << shift), pick.d);
-    const v0 = fixedToFloat(ty - (pty << shift), pick.d);
+    const { u0, v0, span } = this.fallbackRect(tx, ty, pick.d);
     this.renderer.drawTile(
       pick.entry.tex,
       x,
@@ -1290,10 +1417,12 @@ export class FractalViewer {
     const dpr = this.dpr;
     const sizeDev = vis.tilePx * dpr;
     let fading = false;
+    this.visibleKeys = new Set();
 
     for (const t of vis.tiles) {
       const key = this.tileKey(vis.level, t.tx, t.ty);
       wanted.add(key);
+      this.visibleKeys.add(key);
       let entry = this.touch(key);
       // Miss OR upgrade: children may carry refined data a starved cached
       // tile lacks (zooming out of a deep view) — trySynthesize self-gates.
@@ -1303,14 +1432,17 @@ export class FractalViewer {
       const xDev = t.x * dpr;
       const yDev = t.y * dpr;
       const alpha = entry ? Math.min(1, (now - entry.loadedAt) / FADE_MS) : 0;
-      if (entry?.prevTex && alpha >= 1) {
+      if (entry?.prevTex && alpha >= 1 && !entry.preview) {
         this.renderer.deleteTile(entry.prevTex);
         entry.prevTex = null;
       }
       const cx = t.x + vis.tilePx / 2 - this.cssW / 2;
       const cy = t.y + vis.tilePx / 2 - this.cssH / 2;
       if (entry) {
-        if (alpha < 1) {
+        // Preview stand-ins are partially transparent by design: the
+        // ancestor fallback always renders beneath them, and computed
+        // pixels appear sharp on top as they land.
+        if (alpha < 1 || entry.preview) {
           // Base layer of the fade: the tile's own previous texture, else
           // its nearest ancestor fallback.
           if (entry.prevTex) {
@@ -1326,7 +1458,8 @@ export class FractalViewer {
         }
         if (
           alpha < 1 ||
-          !this.drawSupersampled(entry, vis.level, t.tx, t.ty, xDev, yDev, sizeDev)
+          entry.preview ||
+          !this.drawSupersampled(entry, vis.level, t.tx, t.ty, xDev, yDev, sizeDev, wanted)
         ) {
           this.renderer.drawTile(
             entry.tex, xDev, yDev, sizeDev, sizeDev, 0, 0, 1, 1, alpha
