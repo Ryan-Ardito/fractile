@@ -54,6 +54,14 @@ type TileMsg = {
   // Escalation ceiling for this job (idle refinement passes raise it past
   // the interactive hard cap); see the effective-cap guard in handleTile.
   iterCap?: number;
+  // Resume seed: a previously-computed escape field for this exact tile
+  // (physical grid). Escaped pixels (>0) are kept as-is and only the black
+  // ones are (re)computed, so returning to a level continues where it left
+  // off instead of restarting. Reference-independent (escape counts are
+  // intrinsic); the viewer only seeds when the reference generation matches.
+  seed?: Float32Array;
+  // Test lever: overrides FLUSH_MS for overhead A/B (viewer __fractileFlushMs).
+  flushMs?: number;
   refId: number | null;
   // Reference generation echoed back with results (see pool.ts Reference).
   refGen?: number;
@@ -111,10 +119,19 @@ const CANARY_MIN_BLACK = 2048;
 // where it can't (shallow band, unsuitable reference), stop honestly rather
 // than crawl — remaining unresolved pixels render black as before.
 const ESCALATE_TIME_BUDGET_MS = 10000;
-// Time-based progress flushing: any pass running longer than this posts a
-// partial patch (rows so far / current state), so slow tiles paint at a
-// steady few Hz instead of the screen looking hung until the pass ends.
-const FLUSH_MS = 300;
+// Time-based progress flushing. First-pass row flushes are DELTAS — each
+// row is copied and posted exactly once per job no matter the rate — so
+// they run at display rate for a smooth scanline reveal. Escalation and
+// canary flushes ship the whole buffer (scattered-pixel updates), so they
+// keep a slower clock: 15 workers at 60Hz of 270KB copies would be
+// ~240MB/s for nothing the eye can use.
+const FLUSH_MS = 16;
+const FULL_FLUSH_MS = 100;
+// Yield cadence, decoupled from flush cadence: posting a patch is O(1) with
+// transfer and needs no yield, but a MessageChannel round-trip per band is
+// the dominant flush overhead (cancellation only needs ~this latency). So
+// flush at display rate; yield far less often.
+const TICK_MS = 48;
 
 const maxFiniteOf = (out: Float32Array): number => {
   let max = 0;
@@ -253,27 +270,59 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // Partial-progress patch: rows [from, to) of the buffer so far. The
   // viewer applies these in place over a prefilled stand-in, so slow tiles
   // paint progressively instead of appearing all at once.
+  const flushMs = msg.flushMs ?? FLUSH_MS;
   let lastFlush = t0;
   let flushedRows = 0;
   const flushRows = (to: number): void => {
+    const data = out.slice(flushedRows * phys, to * phys);
     post(
-      {
-        type: "tile-patch",
-        id,
-        key,
-        phys,
-        r0: flushedRows,
-        r1: to,
-        data: out.slice(flushedRows * phys, to * phys),
-      }
+      { type: "tile-patch", id, key, phys, r0: flushedRows, r1: to, data },
+      // Fresh slice: transfer instead of clone.
+      [data.buffer]
     );
     flushedRows = to;
     lastFlush = performance.now();
   };
 
-  // First pass, collecting unresolved pixel state.
-  for (let row = 0; row < phys; row += ROW_BAND) {
-    const rowEnd = Math.min(row + ROW_BAND, phys);
+  // Seeded resume: keep every escaped pixel from the prior computation and
+  // rebuild the unresolved set from the black ones (fresh state — escape
+  // counts are reference-independent, so a from-zero recompute of just the
+  // black pixels is correct and skips all the resolved work). The escalation
+  // loop below then continues them; forceRound guarantees it runs even if
+  // few remain.
+  let forceRound = false;
+  if (msg.seed && msg.seed.length === phys * phys) {
+    out.set(msg.seed);
+    un.count = 0;
+    for (let i = 0; i < out.length; i++) {
+      if (out[i] === 0) {
+        un.idx[un.count] = i;
+        un.ax[un.count] = 0;
+        un.ay[un.count] = 0;
+        un.s[un.count] = 0;
+        un.m[un.count] = 0;
+        un.n[un.count] = 0;
+        un.e2[un.count] = 1;
+        un.count++;
+      }
+    }
+    forceRound = un.count > 0;
+    // Show the seeded field immediately (it's already good) while the black
+    // pixels recompute.
+    flushRows(phys);
+  }
+
+  // First pass. Band size adapts so a flush can land every ~flushMs of
+  // compute (smooth reveal on slow tiles); but yielding is DECOUPLED —
+  // posting a patch is O(1) with transfer and needs no macrotask, so we
+  // yield (for cancellation / set-reference) only every TICK_MS, not per
+  // band. That keeps the smooth cadence while cutting yield overhead to a
+  // handful per tile regardless of depth. Skipped entirely when seeded.
+  let band = ROW_BAND;
+  let lastTick = performance.now();
+  for (let row = 0; row < phys && !msg.seed; ) {
+    const rowEnd = Math.min(row + band, phys);
+    const tBand = performance.now();
     if (orbit && deep) {
       perturbRowsDeep(
         dcx0, dcy0, dcE, phys, budget, orbit, row, rowEnd, out, un, bla,
@@ -287,14 +336,22 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     } else {
       directRows(x0, y0, step, phys, budget, row, rowEnd, out, un);
     }
-    await tick();
-    if (cancelled.has(id)) {
-      cancelled.delete(id);
-      post({ type: "aborted", id, key });
-      return;
-    }
-    if (rowEnd < phys && performance.now() - lastFlush >= FLUSH_MS) {
+    const now = performance.now();
+    const dtBand = now - tBand;
+    if (dtBand > flushMs && band > 2) band >>= 1;
+    else if (dtBand < flushMs / 4 && band < ROW_BAND) band <<= 1;
+    row = rowEnd;
+    if (rowEnd < phys && now - lastFlush >= flushMs) {
       flushRows(rowEnd);
+    }
+    if (now - lastTick >= TICK_MS) {
+      await tick();
+      lastTick = performance.now();
+      if (cancelled.has(id)) {
+        cancelled.delete(id);
+        post({ type: "aborted", id, key });
+        return;
+      }
     }
   }
   if (bad.count > 0) {
@@ -309,10 +366,11 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // progressively instead of blocking until fully converged.
   let maxFinite = maxFiniteOf(out);
   while (
-    un.count > RANOUT_PIXEL_THRESHOLD &&
+    (un.count > RANOUT_PIXEL_THRESHOLD || forceRound) &&
     budget < cap &&
     performance.now() - t0 < ESCALATE_TIME_BUDGET_MS
   ) {
+    forceRound = false;
     // Show progress only once something resolved — an all-ran-out frame
     // would paint the tile as (wrong) solid interior.
     if (un.count < phys * phys) {
@@ -379,7 +437,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
           return;
         }
         // Escalation touches scattered pixels; flush the whole buffer.
-        if (performance.now() - lastFlush >= FLUSH_MS) {
+        if (performance.now() - lastFlush >= FULL_FLUSH_MS) {
           flushedRows = 0;
           flushRows(phys);
         }
@@ -439,7 +497,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
               post({ type: "aborted", id, key });
               return;
             }
-            if (performance.now() - lastFlush >= FLUSH_MS) {
+            if (performance.now() - lastFlush >= FULL_FLUSH_MS) {
               flushedRows = 0;
               flushRows(phys);
             }

@@ -18,6 +18,12 @@ export type TileJob = {
   // Ceiling for the worker's self-escalation ladder; defaults to the
   // interactive hard cap. Idle refinement raises it toward ITER_ABS_CAP.
   iterCap?: number;
+  // Test-only flush-interval override (see worker flushMs).
+  flushMs?: number;
+  // Resume seed (a prior escape field for this exact tile) — the worker
+  // keeps escaped pixels and only recomputes black ones. Transferred, so a
+  // job carries it at most once; a re-request without a seed recomputes.
+  seed?: Float32Array;
   needsRef: boolean;
   priority: number;
   // Set once the reference-rescue budget is spent: the worker then renders
@@ -199,6 +205,7 @@ export class FractalEngine {
         queued.iterCap ?? ITER_HARD_CAP,
         job.iterCap ?? ITER_HARD_CAP
       );
+      if (!queued.seed && job.seed) queued.seed = job.seed;
       return;
     }
     if (job.needsRef && this.ref?.status !== "ready") {
@@ -332,20 +339,26 @@ export class FractalEngine {
       slot.taskId = id;
       this.inFlightByKey.set(job.key, id);
       this.inFlight.set(id, { key: job.key, workerIdx: i, job, isRef: false });
-      slot.w.postMessage({
-        type: "tile",
-        id,
-        key: job.key,
-        level: job.level,
-        tx: job.tx,
-        ty: job.ty,
-        size: job.size,
-        maxIter: job.maxIter,
-        iterCap: job.iterCap ?? ITER_HARD_CAP,
-        refId: job.needsRef ? this.ref?.refId ?? null : null,
-        refGen: job.needsRef ? this.ref?.gen ?? 0 : 0,
-        noRescue: job.noRescue ?? false,
-      });
+      slot.w.postMessage(
+        {
+          type: "tile",
+          id,
+          key: job.key,
+          level: job.level,
+          tx: job.tx,
+          ty: job.ty,
+          size: job.size,
+          maxIter: job.maxIter,
+          iterCap: job.iterCap ?? ITER_HARD_CAP,
+          flushMs: job.flushMs,
+          seed: job.seed,
+          refId: job.needsRef ? this.ref?.refId ?? null : null,
+          refGen: job.needsRef ? this.ref?.gen ?? 0 : 0,
+          noRescue: job.noRescue ?? false,
+        },
+        job.seed ? [job.seed.buffer] : []
+      );
+      job.seed = undefined;
     }
   }
 

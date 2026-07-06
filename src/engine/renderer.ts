@@ -37,6 +37,12 @@ export type TileHandle = {
   // Progress stand-in: the palette pass makes its value-0 texels
   // transparent (see uPreview).
   preview: boolean;
+  // Physical rows whose color is stale but whose STYLE is current — set by
+  // patchTile, cleared by ensureColor via a partial (scissored) recolor.
+  // Avoids a full-tile recolor per progress patch (~30x redundant on a
+  // slow tile). [lo, hi); lo >= hi means clean.
+  colorDirtyLo: number;
+  colorDirtyHi: number;
 };
 
 // Offscreen RGBA8 render target for video export frames.
@@ -401,6 +407,8 @@ export class TileRenderer {
       size,
       apron,
       preview,
+      colorDirtyLo: 0,
+      colorDirtyHi: 0,
     };
   }
 
@@ -470,6 +478,8 @@ export class TileRenderer {
       size,
       apron,
       preview: false,
+      colorDirtyLo: 0,
+      colorDirtyHi: 0,
     };
   }
 
@@ -489,7 +499,17 @@ export class TileRenderer {
     gl.texSubImage2D(
       gl.TEXTURE_2D, 0, 0, r0, handle.size, r1 - r0, gl.RED, gl.FLOAT, data
     );
-    handle.colorVersion = -1;
+    // The apron's band-limit spread reads one row past each edge, so a
+    // patch's coloring can shift the row just outside it — widen by 1.
+    const lo = Math.max(0, r0 - 1);
+    const hi = Math.min(handle.size, r1 + 1);
+    if (handle.colorDirtyLo >= handle.colorDirtyHi) {
+      handle.colorDirtyLo = lo;
+      handle.colorDirtyHi = hi;
+    } else {
+      handle.colorDirtyLo = Math.min(handle.colorDirtyLo, lo);
+      handle.colorDirtyHi = Math.max(handle.colorDirtyHi, hi);
+    }
     handle.exportColorVersion = -1;
   }
 
@@ -575,9 +595,18 @@ export class TileRenderer {
     const texVersion = exporting
       ? handle.exportColorVersion
       : handle.colorVersion;
-    if (tex && texVersion === version) return tex;
     const gl = this.gl;
     const size = handle.size;
+    // Style current, texture exists: only a partial recolor of patched rows
+    // is needed (or nothing). Never partial-recolor the export slot — its
+    // dirty range isn't tracked and animated frames recolor wholesale.
+    if (tex && texVersion === version) {
+      if (!exporting && handle.colorDirtyLo < handle.colorDirtyHi) {
+        this.recolorRows(handle, tex, handle.colorDirtyLo, handle.colorDirtyHi);
+        handle.colorDirtyLo = handle.colorDirtyHi = 0;
+      }
+      return tex;
+    }
     if (!tex) {
       tex = gl.createTexture();
       if (!tex) throw new Error("texture allocation failed");
@@ -617,12 +646,60 @@ export class TileRenderer {
     gl.uniform2f(this.paletteUni.get("uViewport") ?? null, size, size);
     gl.bindTexture(gl.TEXTURE_2D, handle.dataTex);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    if (exporting) handle.exportColorVersion = version;
-    else handle.colorVersion = version;
+    if (exporting) {
+      handle.exportColorVersion = version;
+    } else {
+      handle.colorVersion = version;
+      handle.colorDirtyLo = handle.colorDirtyHi = 0;
+    }
 
     // Restore composite state.
     this.restoreCompositeTarget();
     return tex;
+  }
+
+  // Repaint physical rows [lo, hi) of a tile's live colorization from its
+  // data — the incremental counterpart to ensureColor's full pass. Scissor
+  // restricts the palette pass to those rows; gl_FragCoord/texelFetch use
+  // absolute texels, so the result is identical to a full recolor there.
+  private recolorRows(
+    handle: TileHandle,
+    tex: WebGLTexture,
+    lo: number,
+    hi: number
+  ): void {
+    const gl = this.gl;
+    const size = handle.size;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0
+    );
+    gl.viewport(0, 0, size, size);
+    gl.disable(gl.BLEND);
+    gl.enable(gl.SCISSOR_TEST);
+    // uYSign=-1 flips y, so data row r lands on FBO row (size-1-r); the
+    // scissor (bottom-left origin) for data rows [lo, hi) is [size-hi, size-lo).
+    gl.scissor(0, size - hi, size, hi - lo);
+    gl.useProgram(this.paletteProg);
+    const style = this.style;
+    if (style) {
+      gl.uniform1f(this.paletteUni.get("uIterFalloff") ?? null, style.iterFalloff);
+      gl.uniform1f(this.paletteUni.get("uPaletteScale") ?? null, style.paletteScale);
+      gl.uniform1f(this.paletteUni.get("uHueOffset") ?? null, style.hueOffset);
+      gl.uniform1f(this.paletteUni.get("uBandSpacing") ?? null, style.bandSpacing);
+      gl.uniform1f(this.paletteUni.get("uBandContrast") ?? null, style.bandContrast);
+      gl.uniform1f(this.paletteUni.get("uBandOffset") ?? null, style.bandOffset);
+      gl.uniform1f(this.paletteUni.get("uSaturation") ?? null, style.saturation);
+      gl.uniform1f(this.paletteUni.get("uLightness") ?? null, style.lightness);
+    }
+    gl.uniform1i(this.paletteUni.get("uData") ?? null, 0);
+    gl.uniform1f(this.paletteUni.get("uPreview") ?? null, handle.preview ? 1 : 0);
+    gl.uniform4f(this.paletteUni.get("uRect") ?? null, 0, 0, size, size);
+    gl.uniform2f(this.paletteUni.get("uViewport") ?? null, size, size);
+    gl.bindTexture(gl.TEXTURE_2D, handle.dataTex);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.disable(gl.SCISSOR_TEST);
+    this.restoreCompositeTarget();
   }
 
   drawTile(

@@ -75,6 +75,13 @@ const PREWARM_TILE_BUDGET = 384;
 const IDLE_REFINE_PRIORITY = 1e14;
 const IDLE_REFINE_REPLAN_MS = 1500;
 
+// Resume cache: partial escape fields of unfinished tiles, keyed by tile,
+// surviving eviction of the GPU texture. Returning to a level re-seeds the
+// worker with this so it keeps the escaped pixels and only recomputes the
+// black ones — "continue calculating" instead of restarting. LRU-bounded;
+// one full-size field is ~270KB.
+const SEED_CACHE_MAX = 128;
+
 // Interactive iteration cap. The debug override (__fractileCapBase) exists
 // to test the cap-escalation machinery at scaled-down constants — a view
 // where the REAL 2^22 cap binds needs extreme depth.
@@ -213,6 +220,11 @@ export class FractalViewer {
   // Keys issued by the idle planner (refinement + children) — kept in the
   // wanted set so retain() doesn't cancel them at the next repaint.
   private idleKeys = new Set<string>();
+  // See SEED_CACHE_MAX. Map iteration order gives LRU.
+  private partialSeeds = new Map<
+    string,
+    { data: Float32Array; refGen: number; phys: number }
+  >();
   // Keys drawn at the display level in the last render — the gate for
   // partial-progress patches (previews are pointless off screen).
   private visibleKeys = new Set<string>();
@@ -583,7 +595,7 @@ export class FractalViewer {
         continue;
       }
       const pick = this.pickFallback(vis.level, t.tx, t.ty);
-      if (pick) this.drawFallbackPick(t.tx, t.ty, t.x, t.y, vis.tilePx, pick);
+      if (pick) this.drawFallbackPick(vis.level, t.tx, t.ty, t.x, t.y, vis.tilePx, pick);
       if (!pick || pick.d > 1) complete = false;
     }
     this.renderer.readExport(target, out);
@@ -724,6 +736,38 @@ export class FractalViewer {
 
   private tileKey(level: number, tx: bigint, ty: bigint): string {
     return `${level}:${tx}:${ty}`;
+  }
+
+  // Remember an unfinished tile's field so a later revisit can resume it.
+  private storeSeed(
+    key: string,
+    data: Float32Array,
+    phys: number,
+    refGen: number
+  ): void {
+    this.partialSeeds.delete(key);
+    this.partialSeeds.set(key, { data, phys, refGen });
+    while (this.partialSeeds.size > SEED_CACHE_MAX) {
+      const oldest = this.partialSeeds.keys().next().value as string;
+      this.partialSeeds.delete(oldest);
+    }
+  }
+
+  // A clone of the resume seed for `key` if one exists and is still valid to
+  // reuse: same physical size, and same reference generation (or a
+  // reference-independent direct-path field, refGen 0). Cloned because the
+  // pool transfers the buffer into the worker.
+  private takeSeed(key: string, phys: number): Float32Array | undefined {
+    if ((globalThis as { __fractileNoSeed?: boolean }).__fractileNoSeed) return undefined;
+    const s = this.partialSeeds.get(key);
+    if (!s || s.phys !== phys) return undefined;
+    if (s.refGen !== 0 && s.refGen !== this.engine.activeRefGen()) return undefined;
+    // LRU touch.
+    this.partialSeeds.delete(key);
+    this.partialSeeds.set(key, s);
+    (globalThis as { __fractileSeed?: number }).__fractileSeed =
+      ((globalThis as { __fractileSeed?: number }).__fractileSeed ?? 0) + 1;
+    return s.data.slice();
   }
 
   private touch(key: string): CacheEntry | undefined {
@@ -1130,6 +1174,7 @@ export class FractalViewer {
         // The recompute confirmed this tile under the current generation;
         // stamp it so the re-level check doesn't loop on synthesis winners.
         existing.refGen = refGen;
+        this.partialSeeds.delete(key);
       }
       const stale = this.tileWaiters.get(key);
       if (stale) {
@@ -1168,6 +1213,18 @@ export class FractalViewer {
       refGen,
     });
 
+    // Resume cache: an unfinished full-size field is worth keeping so a
+    // revisit continues it; a finished tile needs no seed. Only escaping
+    // pixels (>0) are reusable, so a still-black field of a fresh interior
+    // tile is fine to keep too (its black pixels recompute cheaply via the
+    // cycle test).
+    const stillMore = (!final && iterDone < ITER_HARD_CAP) || logical < TILE_SIZE;
+    if (stillMore && logical >= TILE_SIZE) {
+      this.storeSeed(key, data, phys, refGen);
+    } else if (!stillMore) {
+      this.partialSeeds.delete(key);
+    }
+
     // Learn this level's iteration need from what the tile actually showed.
     // The measured max finite escape count (plus margin) is the bound above
     // which nothing more resolves — pixels still unresolved at the hard cap
@@ -1185,7 +1242,6 @@ export class FractalViewer {
       this.tileWaiters.delete(key);
       for (const w of waiters) w();
     }
-
     this.evictOverflow();
     this.dirty = true;
   }
@@ -1335,7 +1391,8 @@ export class FractalViewer {
     level: number,
     tx: bigint,
     ty: bigint,
-    minDepth = 1
+    minDepth = 1,
+    solidOnly = true
   ): { entry: CacheEntry; d: number } | null {
     const depths: number[] = [];
     const walk = Math.min(MAX_FALLBACK_WALK, level);
@@ -1348,7 +1405,11 @@ export class FractalViewer {
       const entry = this.touch(
         this.tileKey(level - d, tx >> shift, ty >> shift)
       );
-      if (entry && !entry.preview) return { entry, d };
+      // Previews (partial fields with transparent holes) are usable as the
+      // PRIMARY fallback — their flushed detail is exactly what a zoom-in on
+      // an unfinished tile should keep showing — but never as a solid BASE
+      // layer, whose job is to fill those holes.
+      if (entry && (!solidOnly || !entry.preview)) return { entry, d };
     }
     return null;
   }
@@ -1370,6 +1431,7 @@ export class FractalViewer {
   }
 
   private drawFallbackPick(
+    level: number,
     tx: bigint,
     ty: bigint,
     x: number,
@@ -1377,6 +1439,18 @@ export class FractalViewer {
     size: number,
     pick: { entry: CacheEntry; d: number }
   ): void {
+    // A preview fallback carries transparent holes; draw the nearest solid
+    // ancestor beneath it so the holes read as coarser detail, not nothing —
+    // then the preview's real detail composites on top.
+    if (pick.entry.preview) {
+      const base = this.pickFallback(level, tx, ty, pick.d + 1, true);
+      if (base) {
+        const b = this.fallbackRect(tx, ty, base.d);
+        this.renderer.drawTile(
+          base.entry.tex, x, y, size, size, b.u0, b.v0, b.span, b.span, 1
+        );
+      }
+    }
     const { u0, v0, span } = this.fallbackRect(tx, ty, pick.d);
     this.renderer.drawTile(
       pick.entry.tex,
@@ -1452,7 +1526,9 @@ export class FractalViewer {
           } else {
             const pick = this.pickFallback(vis.level, t.tx, t.ty);
             if (pick) {
-              this.drawFallbackPick(t.tx, t.ty, xDev, yDev, sizeDev, pick);
+              this.drawFallbackPick(
+                vis.level, t.tx, t.ty, xDev, yDev, sizeDev, pick
+              );
             }
           }
         }
@@ -1498,16 +1574,26 @@ export class FractalViewer {
               Math.max(this.baseIter(vis.level), entry.maxIter)
             ),
             iterCap: capBase(),
+            flushMs: (globalThis as { __fractileFlushMs?: number }).__fractileFlushMs,
+            seed: this.takeSeed(key, entry.tex.size),
             needsRef,
             priority: cx * cx + cy * cy,
           });
         }
       } else {
-        const pick = this.pickFallback(vis.level, t.tx, t.ty);
+        const pick = this.pickFallback(vis.level, t.tx, t.ty, 1, false);
         if (pick) {
-          this.drawFallbackPick(t.tx, t.ty, xDev, yDev, sizeDev, pick);
+          this.drawFallbackPick(
+            vis.level, t.tx, t.ty, xDev, yDev, sizeDev, pick
+          );
         }
         if (!this.pendingTiles.has(key)) {
+          // A resume seed survived this tile's eviction: recompute full-size
+          // FROM it (escaped pixels intact, black ones continue) rather than
+          // the coarse first pass — the revisit looks finished immediately.
+          const seed = this.takeSeed(
+            key, TILE_SIZE + 2 * TILE_APRON
+          );
           // Nothing at this tile yet: with only a distant ancestor to show
           // (deep-stretched mush), ask for the coarse first pass; with a
           // near ancestor (routine one-level zooms) go straight to full.
@@ -1516,9 +1602,12 @@ export class FractalViewer {
             level: vis.level,
             tx: t.tx,
             ty: t.ty,
-            size: (pick?.d ?? Infinity) > 2 ? COARSE_TILE_SIZE : TILE_SIZE,
+            size:
+              !seed && (pick?.d ?? Infinity) > 2 ? COARSE_TILE_SIZE : TILE_SIZE,
             maxIter: this.tileIter(vis.level, t.tx, t.ty, maxIter),
             iterCap: capBase(),
+            flushMs: (globalThis as { __fractileFlushMs?: number }).__fractileFlushMs,
+            seed,
             needsRef,
             priority: cx * cx + cy * cy,
           });
