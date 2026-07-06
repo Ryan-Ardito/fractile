@@ -1569,11 +1569,20 @@ export class FractalViewer {
             tx: t.tx,
             ty: t.ty,
             size: TILE_SIZE,
+            // Preserve the iteration depth this tile already reached. This
+            // re-request fires for re-LEVELING (a stale reference generation,
+            // a reference-quality issue) as well as for finishing a coarse
+            // tile. Clamping to capBase() here discarded idle-refinement
+            // progress — which climbs to refineCeil(), well above capBase() —
+            // so the instant a rescue bumped the reference generation, every
+            // refined tile got recomputed at the low interactive cap and
+            // visibly UN-refined. A coarse tile (maxIter <= capBase) still
+            // targets capBase; a refined one re-levels at its own depth.
             maxIter: Math.min(
-              capBase(),
+              refineCeil(),
               Math.max(this.baseIter(vis.level), entry.maxIter)
             ),
-            iterCap: capBase(),
+            iterCap: Math.max(capBase(), entry.maxIter),
             flushMs: (globalThis as { __fractileFlushMs?: number }).__fractileFlushMs,
             seed: this.takeSeed(key, entry.tex.size),
             needsRef,
