@@ -54,6 +54,14 @@ const E2_CLAMP = 1e60;
 // treating "starved at some point" as fatal blackened every slow-escaping
 // filament pixel (the z152 streak regression).
 export const BAD_REF = -2;
+// Stored escape-time sentinel for a CONFIRMED interior pixel (attracting-cycle
+// verdict). The output buffer overloads its values: escaped pixels are > 0,
+// not-yet-computed / ran-out / bad-ref pixels are 0, and confirmed interior is
+// this distinct negative marker. Keeping interior separate from 0 lets the
+// palette shader paint it opaque black immediately on a progress stand-in
+// (uPreview) instead of leaving it transparent — so a minibrot interior no
+// longer shows the stretched parent tile through it until the tile finishes.
+export const INTERIOR = -1;
 // An interior verdict is distrusted only after MANY near-edge skips: the
 // verified corruption (escaped-ref false interiors) lingers near-parabolically
 // through hundreds of skips within 2^16 of their validity radii, while a
@@ -487,7 +495,7 @@ export const directRows = (
         ranOut++;
         if (un) recordUnresolved(un, rowIdx + px);
       }
-      out[rowIdx + px] = v > 0 ? v : 0;
+      out[rowIdx + px] = v > 0 ? v : v === 0 ? INTERIOR : 0;
     }
   }
   return ranOut;
@@ -534,7 +542,7 @@ export const perturbRows = (
         ranOut++;
         if (un) recordUnresolved(un, rowIdx + px);
       }
-      out[rowIdx + px] = v > 0 ? v : 0;
+      out[rowIdx + px] = v > 0 ? v : v === 0 ? INTERIOR : 0;
     }
   }
   return ranOut;
@@ -816,7 +824,7 @@ export const perturbRowsDeep = (
         ranOut++;
         if (un) recordUnresolved(un, rowIdx + px);
       }
-      out[rowIdx + px] = v > 0 ? v : 0;
+      out[rowIdx + px] = v > 0 ? v : v === 0 ? INTERIOR : 0;
     }
   }
   return ranOut;

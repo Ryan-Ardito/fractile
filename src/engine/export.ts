@@ -52,11 +52,6 @@ export class ExportCancelledError extends Error {
   }
 }
 
-type SaveFilePicker = (options?: {
-  suggestedName?: string;
-  types?: Array<{ description?: string; accept: Record<string, string[]> }>;
-}) => Promise<FileSystemFileHandle>;
-
 type ChunkRecord = {
   type: "key" | "delta";
   timestamp: number; // playback presentation time, microseconds
@@ -82,9 +77,54 @@ export type ColorAnimation = {
 export type ExportOptions = {
   fps?: number;
   levelsPerSec?: number;
+  // Output frame size (16:9). Defaults to OUT_W x OUT_H (720p). The contain
+  // fit in run() derives the field of view from these, so any 16:9 pair works.
+  outW?: number;
+  outH?: number;
+  // Base name for the saved file; ".mp4" is appended when missing.
+  fileName?: string;
   // When present, the movie's bandOffset/hueOffset animate along the video
   // timeline; when absent, frames use the style snapshot taken at exportBegin.
   colorAnimation?: ColorAnimation;
+};
+
+// User-selectable output resolutions, all 16:9 with even dimensions. The long
+// side drives compute and encode cost; 720p is the default (see OUT_W/OUT_H).
+export const EXPORT_RESOLUTIONS: ReadonlyArray<{
+  label: string;
+  w: number;
+  h: number;
+}> = [
+  { label: "720p", w: 1280, h: 720 },
+  { label: "1080p", w: 1920, h: 1080 },
+  { label: "1440p", w: 2560, h: 1440 },
+  { label: "4K", w: 3840, h: 2160 },
+];
+
+// Rough duration/size for the export UI, using the same pacing and bitrate the
+// encoder will. Duration: the movie spans START_ZOOM→current zoom at
+// levelsPerSec (the css↔output scale offset cancels), so it's independent of
+// resolution. Size: bitrate (resolution-driven) × duration.
+export const estimateExport = (opts: {
+  zoom: number;
+  outW: number;
+  outH: number;
+  levelsPerSec: number;
+  fps?: number;
+}): { durationSec: number; sizeBytes: number } => {
+  const fps = opts.fps ?? FPS;
+  const durationSec = Math.max(0, opts.zoom - START_ZOOM) / opts.levelsPerSec;
+  const bitrate = Math.min(30e6, Math.round(opts.outW * opts.outH * fps * 0.1));
+  return { durationSec, sizeBytes: (bitrate * durationSec) / 8 };
+};
+
+const DEFAULT_EXPORT_NAME = "fractile-zoom.mp4";
+
+// Fold a user-typed base name into a safe ".mp4" file name.
+const normalizeFileName = (name?: string): string => {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return DEFAULT_EXPORT_NAME;
+  return /\.mp4$/i.test(trimmed) ? trimmed : `${trimmed}.mp4`;
 };
 
 // Wrap into [-half, half), mirroring the live loop's numeric hygiene; the
@@ -213,11 +253,17 @@ export class VideoExporter {
   private running = false;
   private fps: number;
   private levelsPerSec: number;
+  private outW: number;
+  private outH: number;
+  private fileName: string;
   private colorAnimation: ColorAnimation | null;
 
   constructor(private viewer: FractalViewer, opts: ExportOptions = {}) {
     this.fps = opts.fps ?? FPS;
     this.levelsPerSec = opts.levelsPerSec ?? LEVELS_PER_SEC;
+    this.outW = opts.outW ?? OUT_W;
+    this.outH = opts.outH ?? OUT_H;
+    this.fileName = normalizeFileName(opts.fileName);
     this.colorAnimation = opts.colorAnimation ?? null;
   }
 
@@ -235,30 +281,15 @@ export class VideoExporter {
     if (this.aborted) throw new ExportCancelledError();
   }
 
-  async run(onProgress: (p: ExportProgress) => void): Promise<void> {
+  // The destination is chosen by the caller (the menu's picker) and handed in,
+  // so this method never opens a dialog. A null handle means no File System
+  // Access target — fall back to a blob download named this.fileName.
+  async run(
+    onProgress: (p: ExportProgress) => void,
+    fileHandle: FileSystemFileHandle | null = null
+  ): Promise<void> {
     if (!VideoExporter.isSupported()) {
       throw new Error("video export needs WebCodecs (Chrome or Edge)");
-    }
-
-    // The save dialog must open while the click's user activation is live —
-    // before any other awaits.
-    const picker = (window as { showSaveFilePicker?: SaveFilePicker })
-      .showSaveFilePicker;
-    let fileHandle: FileSystemFileHandle | null = null;
-    if (picker) {
-      try {
-        fileHandle = await picker.call(window, {
-          suggestedName: "fractile-zoom.mp4",
-          types: [
-            { description: "MP4 video", accept: { "video/mp4": [".mp4"] } },
-          ],
-        });
-      } catch (e) {
-        if ((e as DOMException)?.name === "AbortError") {
-          throw new ExportCancelledError();
-        }
-        throw e;
-      }
     }
 
     const snap = this.viewer.exportBegin();
@@ -282,9 +313,9 @@ export class VideoExporter {
       // height and gains left/right. The zoom shifts by `scale` so one screen
       // pixel maps to `scale` output pixels, matching the field of view along
       // the filled axis.
-      const outW = OUT_W;
-      const outH = OUT_H;
-      const scale = Math.min(OUT_W / snap.cssW, OUT_H / snap.cssH);
+      const outW = this.outW;
+      const outH = this.outH;
+      const scale = Math.min(outW / snap.cssW, outH / snap.cssH);
       const zoomOffset = Math.log2(scale);
       const zEnd = snap.zoom + zoomOffset;
       const zStart = START_ZOOM + zoomOffset;
@@ -679,7 +710,7 @@ export class VideoExporter {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "fractile-zoom.mp4";
+        a.download = this.fileName;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
       }

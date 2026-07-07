@@ -366,6 +366,11 @@ export class FractalViewer {
     this.dirty = true;
   }
 
+  // Current continuous zoom (for UI readouts like the export estimate).
+  getZoom(): number {
+    return this.camera.zoom;
+  }
+
   panPixels(dx: number, dy: number): void {
     this.camera.panPixels(dx, dy);
     this.onCameraMove();

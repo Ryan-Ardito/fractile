@@ -18,6 +18,15 @@ input {
   width: 100%;
 }
 
+select {
+  width: 100%;
+  color: white;
+  background: #303030;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  height: 1.6rem;
+}
+
 #map {
   position: absolute;
   top: 0;
@@ -46,9 +55,12 @@ input {
   border: 1px solid #ccc;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   border-radius: 6px;
-  /* Top strip is reserved for the corner buttons (export / animate). */
-  padding: 46px 20px 20px;
-  transition: all 0.2s;
+  padding: 14px 16px;
+  /* Comfortable, even spacing between controls — not crammed. */
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  transition: opacity 0.2s;
   z-index: 2000;
 }
 
@@ -56,9 +68,139 @@ input {
   opacity: 80%;
 }
 
-#floatingBox label {
-  display: block;
-  margin-top: 10px;
+/* Each control is a thin "name … value" line with the slider on its own
+   full-width row below it (full width = fine drag resolution). The slider's
+   flex-basis:100% forces the wrap; the header items share the row above.
+   Vertical space is saved by tight gaps, not by shrinking the slider. */
+.control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+}
+
+.control .name {
+  order: 1;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Direction toggles sit on the header line, before the value. */
+.control .dirs {
+  order: 2;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.control .dirs button {
+  width: 1.3rem;
+  height: 1.2rem;
+  padding: 0;
+  line-height: 1;
+}
+
+.control .value {
+  order: 3;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.control input[type="range"] {
+  order: 4;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  height: 1.1rem;
+}
+
+/* Collapsible group: a header row (arrow + name) that is the collapse
+   control, with the section's controls beneath it. */
+.settingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionToggle:hover {
+  background: none;
+  color: inherit;
+}
+
+.sectionToggle:hover .sectionTitle {
+  text-decoration: underline;
+}
+
+.sectionToggle .chevron {
+  font-size: 0.7em;
+  width: 0.7em;
+  text-align: center;
+}
+
+/* Section header row: the collapse label (natural width) and the section's
+   action button sharing one line, the button filling the remaining space. */
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionHeaderRow .sectionToggle {
+  flex: 0 0 auto;
+}
+
+#animateButton,
+#exportButton {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 1.7rem;
+}
+
+/* Always-visible export row: resolution dropdown at half width, the size /
+   duration estimate filling the rest. */
+.exportEstimate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#exportResolution {
+  flex: 0 0 auto;
+  width: 50%;
+}
+
+.exportEstimate .estimate {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 
 #menuButton {
@@ -70,29 +212,6 @@ input {
   left: 12px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   z-index: 1;
-}
-
-#exportButton {
-  position: absolute;
-  opacity: 60%;
-  height: 1.8rem;
-  left: 8px;
-  top: 10px;
-  width: 14rem;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-}
-
-#animateButton {
-  position: absolute;
-  /* background-color: rgba(0, 0, 0, 0.4); */
-  opacity: 60%;
-  height: 1.8rem;
-  right: 8px;
-  top: 10px;
-  width: 4rem;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
 }
 
 button {

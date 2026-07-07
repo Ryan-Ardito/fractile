@@ -8,6 +8,7 @@ import {
   confirmInterior,
   directRows,
   escapeTime,
+  INTERIOR,
   makeUnresolvedBuf,
   perturbPixel,
   perturbPixelDeep,
@@ -295,7 +296,10 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
     out.set(msg.seed);
     un.count = 0;
     for (let i = 0; i < out.length; i++) {
-      if (out[i] === 0) {
+      // Recompute every black pixel (uncomputed/ran-out = 0 and confirmed
+      // INTERIOR < 0): escape counts are reference-independent so the seeded
+      // escaped pixels stand, and the cheap cycle test re-confirms interiors.
+      if (out[i] <= 0) {
         un.idx[un.count] = i;
         un.ax[un.count] = 0;
         un.ay[un.count] = 0;
@@ -426,7 +430,9 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
         un.e2[write] = pixelState.e2;
         write++;
       } else {
-        out[idx] = v > 0 ? v : 0;
+        // v is escaped (>0), confirmed interior (0 -> sentinel), or a
+        // give-up BAD_REF under noRescue (kept 0 = transparent/pre-detection).
+        out[idx] = v > 0 ? v : v === 0 ? INTERIOR : 0;
         if (v > maxFinite) maxFinite = v;
       }
       if ((i & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
@@ -464,7 +470,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // pay ~8 replays and move on.
   if (orbit && bla !== null && !cancelled.has(id)) {
     const black: number[] = [];
-    for (let i = 0; i < out.length; i++) if (out[i] === 0) black.push(i);
+    for (let i = 0; i < out.length; i++) if (out[i] <= 0) black.push(i);
     if (black.length >= CANARY_MIN_BLACK) {
       const plainPixel = (idx: number, budgetP: number): number => {
         const px = idx % phys;

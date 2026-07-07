@@ -80,9 +80,12 @@ uniform float uBandContrast;
 uniform float uBandOffset;
 uniform float uSaturation;
 uniform float uLightness;
-// 1 on progress stand-ins: value-0 texels (not yet computed) become
-// transparent so the smooth ancestor fallback shows through beneath.
-// Normal tiles keep alpha 1 everywhere (0 = interior = opaque black).
+// 1 on progress stand-ins: ONLY value-0 texels (not yet computed / ran-out)
+// become transparent so the smooth ancestor fallback shows through beneath.
+// Confirmed interior is stored as a distinct negative sentinel (< 0), so it
+// stays opaque black even mid-compute — the interior no longer reveals the
+// stretched parent until the tile finishes. Normal tiles keep alpha 1
+// everywhere (both 0 and the interior sentinel render opaque black).
 uniform float uPreview;
 in vec2 vUV;
 out vec4 outColor;
@@ -107,17 +110,22 @@ float fetchIter(ivec2 p, int hi) {
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int hi = textureSize(uData, 0).x - 1;
-  float it = fetchIter(p, hi);
+  // Sign of the raw center texel drives alpha only (see below); the interior
+  // sentinel is negative. Everything else clamps it to 0 so interior enters
+  // the color/spread math exactly as the old 0 did — committed tiles stay
+  // pixel-identical, only preview alpha changes.
+  float itRaw = fetchIter(p, hi);
+  float it = max(itRaw, 0.0);
 
   // The data can only resolve palette features wider than one sample step;
   // fade bands/hue toward their means where they cycle faster than that,
   // rather than render detail the tile doesn't actually contain. On preview
   // stand-ins a 0-valued neighbor is ABSENT data, not a real cliff — it
   // must not gray out the last computed row at the patch boundary.
-  float n0 = fetchIter(p + ivec2(1, 0), hi);
-  float n1 = fetchIter(p + ivec2(-1, 0), hi);
-  float n2 = fetchIter(p + ivec2(0, 1), hi);
-  float n3 = fetchIter(p + ivec2(0, -1), hi);
+  float n0 = max(fetchIter(p + ivec2(1, 0), hi), 0.0);
+  float n1 = max(fetchIter(p + ivec2(-1, 0), hi), 0.0);
+  float n2 = max(fetchIter(p + ivec2(0, 1), hi), 0.0);
+  float n3 = max(fetchIter(p + ivec2(0, -1), hi), 0.0);
   float d0 = (uPreview > 0.5 && n0 <= 0.0) ? 0.0 : abs(it - n0);
   float d1 = (uPreview > 0.5 && n1 <= 0.0) ? 0.0 : abs(it - n1);
   float d2 = (uPreview > 0.5 && n2 <= 0.0) ? 0.0 : abs(it - n2);
@@ -144,7 +152,9 @@ void main() {
   else if (hp < 5.0) rgb = vec3(x, 0.0, c);
   else               rgb = vec3(c, 0.0, x);
   float m = light - 0.5 * c;
-  float a = it <= 0.0 ? 1.0 - uPreview : 1.0;
+  // Only genuinely-absent texels (raw exactly 0: uncomputed / ran-out) go
+  // transparent on preview; the interior sentinel (raw < 0) stays opaque black.
+  float a = itRaw == 0.0 ? 1.0 - uPreview : 1.0;
   // PREMULTIPLIED: transparent texels must carry zero rgb, or the
   // compositor's bilinear filtering bleeds their black into the boundary
   // row (a dark seam along partial-patch edges). a = 1 everywhere on
