@@ -107,6 +107,18 @@ float fetchIter(ivec2 p, int hi) {
   return it <= REMAP_T ? it : REMAP_T + REMAP_K * log(1.0 + (it - REMAP_T) / REMAP_K);
 }
 
+// Integer bit-hash (Wang-style avalanche), driver-independent — unlike a
+// sin()-based hash, whose result varies with each GPU's transcendental
+// precision and can settle into a faint repeating pattern. Used for dither.
+uint uhash(uint x) {
+  x ^= x >> 16; x *= 0x7feb352du;
+  x ^= x >> 15; x *= 0x846ca68bu;
+  x ^= x >> 16; return x;
+}
+float fhash(uvec2 p, uint seed) {
+  return float(uhash(p.x ^ uhash(p.y ^ uhash(seed)))) * (1.0 / 4294967296.0);
+}
+
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int hi = textureSize(uData, 0).x - 1;
@@ -162,13 +174,9 @@ void main() {
   // Keyed to the tile's own texel grid (gl_FragCoord in the tile's render
   // target), so re-colorized tiles stay deterministic and it survives
   // magnification as a faint blur rather than a repeating pattern.
-  vec2 q = gl_FragCoord.xy;
-  vec3 r0 = fract(sin(vec3(dot(q, vec2(12.9898, 78.233)),
-                           dot(q, vec2(39.346, 11.135)),
-                           dot(q, vec2(63.712, 27.531)))) * 43758.5453);
-  vec3 r1 = fract(sin(vec3(dot(q + 17.0, vec2(12.9898, 78.233)),
-                           dot(q + 17.0, vec2(39.346, 11.135)),
-                           dot(q + 17.0, vec2(63.712, 27.531)))) * 43758.5453);
+  uvec2 fp = uvec2(gl_FragCoord.xy);
+  vec3 r0 = vec3(fhash(fp, 0u), fhash(fp, 1u), fhash(fp, 2u));
+  vec3 r1 = vec3(fhash(fp, 3u), fhash(fp, 4u), fhash(fp, 5u));
   vec3 dth = (r0 + r1 - 1.0) / 255.0;
   // PREMULTIPLIED: transparent texels must carry zero rgb, or the
   // compositor's bilinear filtering bleeds their black into the boundary
