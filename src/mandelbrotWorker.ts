@@ -369,6 +369,15 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // recomputed. Each round posts a provisional frame so deep tiles appear
   // progressively instead of blocking until fully converged.
   let maxFinite = maxFiniteOf(out);
+  // Hoisted replay closure for interior confirmation (one alloc per tile, not
+  // per interior pixel): confirmInterior calls it synchronously, so the
+  // mutable cx/cy holders are read before the next pixel overwrites them.
+  let cCx = 0;
+  let cCy = 0;
+  const escReplay = (b: number): number =>
+    deep
+      ? perturbPixelDeep(cCx, cCy, dcE, orbit!, b, 0, 0, 0, dcE, 0)
+      : perturbPixel(cCx, cCy, orbit!, b);
   while (
     (un.count > RANOUT_PIXEL_THRESHOLD || forceRound) &&
     budget < cap &&
@@ -404,13 +413,9 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
           : perturbPixel(cx, cy, orbit, next, un.n[i], un.ax[i], un.ay[i], un.m[i], bla, un.e2[i])
         : escapeTime(cx, cy, next, un.n[i], un.ax[i], un.ay[i], un.e2[i]);
       if (v === 0 && orbit && bla !== null) {
-        v = confirmInterior(
-          conf, idx, pixelState.n,
-          (b) => deep
-            ? perturbPixelDeep(cx, cy, dcE, orbit!, b, 0, 0, 0, dcE, 0)
-            : perturbPixel(cx, cy, orbit!, b),
-          next
-        );
+        cCx = cx;
+        cCy = cy;
+        v = confirmInterior(conf, idx, pixelState.n, escReplay, next);
       }
       if (v === BAD_REF && !msg.noRescue) {
         if (bad.count === 0) {
@@ -469,9 +474,13 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
   // the honest price, paid only on proven corruption. True-interior tiles
   // pay ~8 replays and move on.
   if (orbit && bla !== null && !cancelled.has(id)) {
-    const black: number[] = [];
-    for (let i = 0; i < out.length; i++) if (out[i] <= 0) black.push(i);
-    if (black.length >= CANARY_MIN_BLACK) {
+    // Count the black region without materializing it: the common
+    // (non-corrupt) case only ever probes CANARY_COUNT pixels, so a boxed
+    // index array of the whole region — tens of thousands of entries on a
+    // minibrot body — was pure waste.
+    let blackCount = 0;
+    for (let i = 0; i < out.length; i++) if (out[i] <= 0) blackCount++;
+    if (blackCount >= CANARY_MIN_BLACK) {
       const plainPixel = (idx: number, budgetP: number): number => {
         const px = idx % phys;
         const py = (idx / phys) | 0;
@@ -481,22 +490,35 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
           ? perturbPixelDeep(cx, cy, dcE, orbit!, budgetP, 0, 0, 0, dcE, 0)
           : perturbPixel(cx, cy, orbit!, budgetP);
       };
+      // Probe every stride-th black pixel (same spread as before), located in
+      // one scan instead of by index into a prebuilt array.
+      const stride = Math.max(1, Math.floor(blackCount / CANARY_COUNT));
       let flipped = false;
-      const stride = Math.max(1, Math.floor(black.length / CANARY_COUNT));
-      for (let k = 0; k < CANARY_COUNT && k * stride < black.length; k++) {
-        if (plainPixel(black[k * stride], budget) > 0) {
-          flipped = true;
-          break;
+      let seen = 0;
+      let target = 0;
+      let probes = 0;
+      for (let i = 0; i < out.length && probes < CANARY_COUNT; i++) {
+        if (out[i] > 0) continue;
+        if (seen === target) {
+          if (plainPixel(i, budget) > 0) {
+            flipped = true;
+            break;
+          }
+          probes++;
+          target = probes * stride;
         }
+        seen++;
       }
       if (flipped) {
-        for (let i = 0; i < black.length; i++) {
-          const v = plainPixel(black[i], budget);
+        let done = 0;
+        for (let i = 0; i < out.length; i++) {
+          if (out[i] > 0) continue;
+          const v = plainPixel(i, budget);
           if (v > 0) {
-            out[black[i]] = v;
+            out[i] = v;
             if (v > maxFinite) maxFinite = v;
           }
-          if ((i & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
+          if ((done & (ESCALATE_CHUNK - 1)) === ESCALATE_CHUNK - 1) {
             await tick();
             if (cancelled.has(id)) {
               cancelled.delete(id);
@@ -508,6 +530,7 @@ const handleTile = async (msg: TileMsg): Promise<void> => {
               flushRows(phys);
             }
           }
+          done++;
         }
       }
     }

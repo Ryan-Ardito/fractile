@@ -308,6 +308,14 @@ export class TileRenderer {
   private paletteUni: Map<string, WebGLUniformLocation | null> = new Map();
   private compUni: Map<string, WebGLUniformLocation | null> = new Map();
   private subUni: Map<string, WebGLUniformLocation | null> = new Map();
+  // Composite uniforms resolved once at link: drawTile sets these per tile,
+  // per frame, so a string-keyed Map.get each would be hundreds of hash
+  // lookups a frame for values that never move after link.
+  private cuRect: WebGLUniformLocation | null = null;
+  private cuTexRect: WebGLUniformLocation | null = null;
+  private cuAlpha: WebGLUniformLocation | null = null;
+  private cuCubicMix: WebGLUniformLocation | null = null;
+  private cuTexSize: WebGLUniformLocation | null = null;
   private fbo: WebGLFramebuffer;
   private style: StyleVars | null = null;
   private styleVersion = 0;
@@ -356,6 +364,11 @@ export class TileRenderer {
     ]) {
       this.compUni.set(name, gl.getUniformLocation(this.compositeProg, name));
     }
+    this.cuRect = this.compUni.get("uRect") ?? null;
+    this.cuTexRect = this.compUni.get("uTexRect") ?? null;
+    this.cuAlpha = this.compUni.get("uAlpha") ?? null;
+    this.cuCubicMix = this.compUni.get("uCubicMix") ?? null;
+    this.cuTexSize = this.compUni.get("uTexSize") ?? null;
     for (const name of [
       "uRect",
       "uViewport",
@@ -759,15 +772,15 @@ export class TileRenderer {
     // sampling kernels read real neighbor data across logical edges.
     const phys = handle.size;
     const inner = phys - 2 * handle.apron;
-    gl.uniform4f(this.compUni.get("uRect") ?? null, x, y, w, h);
+    gl.uniform4f(this.cuRect, x, y, w, h);
     gl.uniform4f(
-      this.compUni.get("uTexRect") ?? null,
+      this.cuTexRect,
       (handle.apron + u0 * inner) / phys,
       (handle.apron + v0 * inner) / phys,
       (uSpan * inner) / phys,
       (vSpan * inner) / phys
     );
-    gl.uniform1f(this.compUni.get("uAlpha") ?? null, alpha);
+    gl.uniform1f(this.cuAlpha, alpha);
     // Ramp from bilinear to B-spline as magnification grows past native:
     // native tiles stay bit-exact, stretched fallbacks get the smooth kernel.
     // Preview stand-ins are exempt: their row-by-row fill leaves an
@@ -778,10 +791,10 @@ export class TileRenderer {
     // anyway and sharpens on commit.
     const mag = w / (uSpan * inner);
     gl.uniform1f(
-      this.compUni.get("uCubicMix") ?? null,
+      this.cuCubicMix,
       handle.preview ? 0 : Math.min(1, Math.max(0, mag - 1))
     );
-    gl.uniform1f(this.compUni.get("uTexSize") ?? null, handle.size);
+    gl.uniform1f(this.cuTexSize, handle.size);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }

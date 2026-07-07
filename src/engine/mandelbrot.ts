@@ -517,6 +517,13 @@ export const perturbRows = (
   conf?: ConfirmBuf
 ): number => {
   let ranOut = 0;
+  // One replay closure per call (not per interior pixel): confirmInterior
+  // invokes it synchronously, so these mutable dc holders are read before the
+  // next pixel overwrites them. Avoids a closure allocation per black pixel.
+  let cDcx = 0;
+  let cDcy = 0;
+  const replay = (budget: number): number =>
+    perturbPixel(cDcx, cDcy, orbit, budget);
   for (let py = rowStart; py < rowEnd; py++) {
     const dcy = dcy0 + (py + 0.5) * step;
     const rowIdx = py * size;
@@ -524,11 +531,9 @@ export const perturbRows = (
       const dcx = dcx0 + (px + 0.5) * step;
       let v = perturbPixel(dcx, dcy, orbit, maxIter, 0, 0, 0, 0, bla);
       if (v === 0 && bla !== null && conf) {
-        v = confirmInterior(
-          conf, rowIdx + px, pixelState.n,
-          (budget) => perturbPixel(dcx, dcy, orbit, budget),
-          maxIter
-        );
+        cDcx = dcx;
+        cDcy = dcy;
+        v = confirmInterior(conf, rowIdx + px, pixelState.n, replay, maxIter);
       }
       if (v === BAD_REF) {
         if (bad) {
@@ -798,6 +803,11 @@ export const perturbRowsDeep = (
   conf?: ConfirmBuf
 ): number => {
   let ranOut = 0;
+  // One replay closure per call; see perturbRows.
+  let cUx = 0;
+  let cUy = 0;
+  const replay = (budget: number): number =>
+    perturbPixelDeep(cUx, cUy, dcE, orbit, budget, 0, 0, 0, dcE, 0);
   for (let py = rowStart; py < rowEnd; py++) {
     const uy = u0y + (py + 0.5);
     const rowIdx = py * size;
@@ -805,11 +815,9 @@ export const perturbRowsDeep = (
       const ux = u0x + (px + 0.5);
       let v = perturbPixelDeep(ux, uy, dcE, orbit, maxIter, 0, 0, 0, dcE, 0, bla);
       if (v === 0 && bla !== null && conf) {
-        v = confirmInterior(
-          conf, rowIdx + px, pixelState.n,
-          (budget) => perturbPixelDeep(ux, uy, dcE, orbit, budget, 0, 0, 0, dcE, 0),
-          maxIter
-        );
+        cUx = ux;
+        cUy = uy;
+        v = confirmInterior(conf, rowIdx + px, pixelState.n, replay, maxIter);
       }
       if (v === BAD_REF) {
         if (bad) {
