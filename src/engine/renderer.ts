@@ -155,11 +155,26 @@ void main() {
   // Only genuinely-absent texels (raw exactly 0: uncomputed / ran-out) go
   // transparent on preview; the interior sentinel (raw < 0) stays opaque black.
   float a = itRaw == 0.0 ? 1.0 - uPreview : 1.0;
+  // 8-bit RGBA storage bands smooth gradients: a wide, slowly-varying
+  // iteration ramp (large exterior fields) quantizes to visible steps once
+  // baked into the cache texture. Spread the quantization with ~1 LSB of
+  // triangular-PDF noise per channel before the hardware rounds to 8 bits.
+  // Keyed to the tile's own texel grid (gl_FragCoord in the tile's render
+  // target), so re-colorized tiles stay deterministic and it survives
+  // magnification as a faint blur rather than a repeating pattern.
+  vec2 q = gl_FragCoord.xy;
+  vec3 r0 = fract(sin(vec3(dot(q, vec2(12.9898, 78.233)),
+                           dot(q, vec2(39.346, 11.135)),
+                           dot(q, vec2(63.712, 27.531)))) * 43758.5453);
+  vec3 r1 = fract(sin(vec3(dot(q + 17.0, vec2(12.9898, 78.233)),
+                           dot(q + 17.0, vec2(39.346, 11.135)),
+                           dot(q + 17.0, vec2(63.712, 27.531)))) * 43758.5453);
+  vec3 dth = (r0 + r1 - 1.0) / 255.0;
   // PREMULTIPLIED: transparent texels must carry zero rgb, or the
   // compositor's bilinear filtering bleeds their black into the boundary
   // row (a dark seam along partial-patch edges). a = 1 everywhere on
   // normal tiles, so their colors are untouched.
-  outColor = vec4(clamp(rgb + m, 0.0, 1.0) * a, a);
+  outColor = vec4(clamp(rgb + m + dth, 0.0, 1.0) * a, a);
 }`;
 
 // Build a parent tile's escape-time data by 2:1 subsampling a child tile
