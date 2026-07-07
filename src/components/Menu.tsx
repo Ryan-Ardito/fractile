@@ -12,6 +12,20 @@ type ExportUiState =
   | { kind: "running"; progress: ExportProgress }
   | { kind: "error"; message: string };
 
+// m:ss, for the exact elapsed readout.
+const fmtDuration = (seconds: number): string => {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+};
+
+// Coarse buckets for the remaining estimate. The per-frame/tile work units
+// aren't uniform, so a to-the-second countdown just jitters and reads as
+// precision we don't have — round to 15s steps, then whole minutes.
+const fmtEstimate = (seconds: number): string => {
+  if (seconds < 45) return `${Math.max(15, Math.round(seconds / 15) * 15)}s`;
+  return `${Math.round(seconds / 60)} min`;
+};
+
 export const Menu = () => {
   const { viewer, animationValues, controlValues, updateControlValues } =
     useAppContext();
@@ -32,9 +46,19 @@ export const Menu = () => {
     kind: "idle",
   });
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [exportHover, setExportHover] = useState(false);
   const exporterRef = useRef<VideoExporter | null>(null);
   const errorTimer = useRef<number | undefined>(undefined);
   const confirmTimer = useRef<number | undefined>(undefined);
+  const exportStartRef = useRef<number>(0);
+  // Ticks once a second while exporting so the elapsed/remaining readout keeps
+  // advancing between the exporter's own progress callbacks.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (exportState.kind !== "running") return;
+    const id = window.setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [exportState.kind]);
 
   const clearConfirmCancel = () => {
     clearTimeout(confirmTimer.current);
@@ -79,11 +103,19 @@ export const Menu = () => {
     }
     const exporter = new VideoExporter(v, { colorAnimation });
     exporterRef.current = exporter;
+    // 0 == not yet started; the clock starts on the first progress callback,
+    // which the exporter fires once the save dialog closes (see export.ts).
+    // This keeps the file-picker wait out of the elapsed/remaining readout.
+    exportStartRef.current = 0;
     setExportState({
       kind: "running",
       progress: { phase: "render", fraction: 0 },
     });
-    exporter.run((progress) => setExportState({ kind: "running", progress }))
+    exporter
+      .run((progress) => {
+        if (exportStartRef.current === 0) exportStartRef.current = Date.now();
+        setExportState({ kind: "running", progress });
+      })
       .then(
         () => {
           exporterRef.current = null;
@@ -126,13 +158,30 @@ export const Menu = () => {
     };
   }, []);
 
+  const runningLabel = (): string => {
+    if (exportState.kind !== "running") return "";
+    const pct = Math.floor(exportState.progress.fraction * 100);
+    // Clock hasn't started until the picker closes and the first tick lands.
+    if (exportStartRef.current === 0) return `exporting ${pct}%`;
+    const elapsed = (Date.now() - exportStartRef.current) / 1000;
+    if (exportState.progress.phase === "save") {
+      return `saving… · ${fmtDuration(elapsed)}`;
+    }
+    const f = exportState.progress.fraction;
+    // Linear extrapolation from progress-so-far; needs a little history before
+    // the estimate is worth showing.
+    const remaining =
+      f > 0.02 && elapsed > 1 ? (elapsed * (1 - f)) / f : null;
+    const tail =
+      remaining === null ? "" : ` · ~${fmtEstimate(remaining)} left`;
+    return `exporting ${pct}% · ${fmtDuration(elapsed)}${tail}`;
+  };
+
   const exportLabel =
     exportState.kind === "running"
       ? confirmCancel
         ? "click again to cancel"
-        : exportState.progress.phase === "save"
-          ? "saving…"
-          : `exporting ${Math.floor(exportState.progress.fraction * 100)}%`
+        : runningLabel()
       : exportState.kind === "error"
         ? exportState.message
         : "export zoom video";
@@ -170,6 +219,8 @@ export const Menu = () => {
           <button
             id="exportButton"
             onClick={onExportClick}
+            onMouseEnter={() => setExportHover(true)}
+            onMouseLeave={() => setExportHover(false)}
             title={
               exportState.kind === "running"
                 ? confirmCancel
@@ -178,11 +229,24 @@ export const Menu = () => {
                 : "export a zoom movie ending at this view"
             }
             style={
+              // While running the fill is an inline gradient, so the stylesheet
+              // :hover (black text on white) can't repaint the background and
+              // would only darken the text. Drive hover ourselves instead:
+              // keep the text white and brighten the fill + track on hover.
               exportState.kind === "running"
                 ? {
                     background: `linear-gradient(to right, ${
-                      confirmCancel ? "#7a3d3d" : "#3d6b4f"
-                    } ${exportFill}%, #303030 ${exportFill}%)`,
+                      confirmCancel
+                        ? exportHover
+                          ? "#9c4f4f"
+                          : "#7a3d3d"
+                        : exportHover
+                          ? "#4f8a67"
+                          : "#3d6b4f"
+                    } ${exportFill}%, ${
+                      exportHover ? "#3a3a3a" : "#303030"
+                    } ${exportFill}%)`,
+                    color: "white",
                     cursor: "pointer",
                   }
                 : undefined

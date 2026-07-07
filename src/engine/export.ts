@@ -265,6 +265,10 @@ export class VideoExporter {
     const openEncoders: VideoEncoder[] = [];
     let writable: FileSystemWritableFileStream | null = null;
     try {
+      // First tick now that the picker has returned: everything past this
+      // point is machine work, so this marks t0 for the elapsed/remaining
+      // readout and excludes however long the user sat in the save dialog.
+      onProgress({ phase: "render", fraction: 0 });
       // Output dimensions: viewport aspect at a fixed long side, even for
       // yuv420. The zoom path shifts by the css-to-output scale so the
       // movie's field of view matches the screen's.
@@ -688,6 +692,22 @@ export class VideoExporter {
           await writable.abort();
         } catch {
           // Already closed or errored.
+        }
+      }
+      // A cancelled export leaves the user-picked file behind — the save
+      // dialog creates it (0 bytes) up front, and aborting the writable only
+      // discards the swap so the empty original persists. Delete it so a
+      // cancel leaves no stray artifact. remove() is Chrome 110+; export
+      // already requires a WebCodecs browser, but guard for older/other UAs.
+      if (this.aborted && fileHandle) {
+        try {
+          await (
+            fileHandle as FileSystemFileHandle & {
+              remove?: () => Promise<void>;
+            }
+          ).remove?.();
+        } catch {
+          // remove() unsupported or the file is already gone.
         }
       }
       if (target) this.viewer.exportDeleteTarget(target);
