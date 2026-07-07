@@ -25,13 +25,16 @@ import { EXPORT_SUPERSAMPLE, FractalViewer } from "./viewer";
 const FPS = 60;
 const LEVELS_PER_SEC = 2;
 const SEGMENT_FRAMES = 30;
-// Output long side. Fixed rather than screen-derived: it bounds the tile
-// window (and so cache pressure) no matter the display, and decouples the
-// movie from the monitor it was recorded on. 720p-class on purpose — it
-// encodes ~2.3x faster than 1080p, computes ~2x fewer/shallower native
-// tiles, and shifts the opportunistic supersample level onto exactly the
-// tiles a 1920-wide screen's exploration cached.
-const OUT_LONG_SIDE = 1280;
+// Output frame: fixed 16:9 720p, not screen-derived. A fixed size bounds the
+// tile window (and so cache pressure) no matter the display and decouples the
+// movie from the monitor it was recorded on; 16:9 720p is a universal share
+// format. 720p-class on purpose — it encodes ~2.3x faster than 1080p,
+// computes ~2x fewer/shallower native tiles, and shifts the opportunistic
+// supersample level onto exactly the tiles a 1920-wide screen's exploration
+// cached. The frame is centered on the viewport and sized to CONTAIN it (see
+// run()), so the movie always shows a superset of the live view.
+const OUT_W = 1280;
+const OUT_H = 720;
 // Opening shot: the whole set, matching the default home view.
 const START_ZOOM = 4;
 const KEYFRAME_INTERVAL = 120; // frames; segment starts are always keyframes
@@ -269,14 +272,19 @@ export class VideoExporter {
       // point is machine work, so this marks t0 for the elapsed/remaining
       // readout and excludes however long the user sat in the save dialog.
       onProgress({ phase: "render", fraction: 0 });
-      // Output dimensions: viewport aspect at a fixed long side, even for
-      // yuv420. The zoom path shifts by the css-to-output scale so the
-      // movie's field of view matches the screen's.
-      const landscape = snap.cssW >= snap.cssH;
-      const cssLong = landscape ? snap.cssW : snap.cssH;
-      const scale = OUT_LONG_SIDE / cssLong;
-      const outW = Math.max(2, Math.round(snap.cssW * scale) & ~1);
-      const outH = Math.max(2, Math.round(snap.cssH * scale) & ~1);
+      // Fixed 16:9 720p frame, centered on the viewport center and sized to
+      // CONTAIN the whole viewport: the movie always shows at least the live
+      // view, extended on the two sides of whichever axis is proportionally
+      // smaller. `scale` is the contain fit — the largest factor that keeps
+      // the scaled viewport inside 1280x720 — so the tighter axis fills the
+      // frame exactly and the looser one gains margin. A viewport wider than
+      // 16:9 keeps full width and gains top/bottom; a taller one keeps full
+      // height and gains left/right. The zoom shifts by `scale` so one screen
+      // pixel maps to `scale` output pixels, matching the field of view along
+      // the filled axis.
+      const outW = OUT_W;
+      const outH = OUT_H;
+      const scale = Math.min(OUT_W / snap.cssW, OUT_H / snap.cssH);
       const zoomOffset = Math.log2(scale);
       const zEnd = snap.zoom + zoomOffset;
       const zStart = START_ZOOM + zoomOffset;
